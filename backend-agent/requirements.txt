@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+langchain-google-vertexai
+langchain-postgres  # For AlloyDB pgvector
+langchain-google-firestore
+google-cloud-dlp
+pgvector
+psycopg[binary] # Sync Postgres driver
+pydantic-settings
+pypdf
+langchain-community

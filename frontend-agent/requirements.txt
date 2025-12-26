@@ -1,0 +1,7 @@
+streamlit
+requests
+pydantic-settings
+google-auth
+google-auth-httplib2
+requests
+streamlit
