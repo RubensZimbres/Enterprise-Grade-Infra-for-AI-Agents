@@ -6,27 +6,95 @@ This repository contains a full-stack, secure AI platform deployed on Google Clo
 
 ![Google Cloud Architecture](images/Google_Cloud_Architecture.jpg)
 *Figure 1: Google Cloud Platform Architecture*
-  
 
-The correspondent architecture in AWS is as follows:
-  
-
-![AWS Architecture](images/AWS_Architecture.jpg)
-*Figure 2: AWS Architecture (for comparison)*
-  
 The platform is composed of three main layers:
 
-1.  **Frontend Agent (UI):** A Streamlit application providing a chat interface. It is protected by a Global Load Balancer with Identity-Aware Proxy (IAP) for user authentication.
-2.  **Backend Agent (Neural Core):** A FastAPI service that orchestrates the RAG pipeline. It handles document retrieval, LLM interaction (Gemini Pro), and persistent memory.
-3.  **Infrastructure (Terraform):** Fully automated deployment using "Infrastructure as Code," including private networking and serverless scaling.
+1.  **Frontend Agent (UI):** A Streamlit application providing a chat interface. Protected by a Global Load Balancer with Identity-Aware Proxy (IAP) and Cloud Armor.
+2.  **Backend Agent (Neural Core):** A FastAPI service orchestrating the RAG pipeline, secured by OIDC authentication and internal-only networking.
+3.  **Infrastructure (Terraform):** Fully automated deployment using "Infrastructure as Code."
 
-## Key Features
+## Security & Resilience: A Multi-Layered Defense
 
--   **RAG Pipeline:** Uses Vertex AI Embeddings and AlloyDB (with `pgvector`) for high-speed semantic search.
--   **Automated Guardrails:** Integrates Google Cloud DLP to sanitize user input and model output, masking PII (emails, credit cards, phones) in real-time.
--   **Conversation Memory:** Uses Cloud Firestore to maintain persistent chat history across sessions.
--   **Service-to-Service Security:** The Frontend authenticates to the Backend using OIDC Identity Tokens, ensuring the Backend remains private (Internal Only).
--   **Enterprise Security:** Secured by IAP, Cloud IAM, and VPC Service Controls.
+This platform implements a robust, multi-layered security strategy. Following an extensive audit using the `/security:analyze` command, the codebase and infrastructure have been hardened against the following threats:
+
+### 1. Web & Application Security (OWASP Top 10)
+-   **SQL Injection (SQLi) Protection:**
+    -   **Infrastructure Level:** Google Cloud Armor is configured with pre-configured WAF rules (`sqli-v33-stable`) to filter malicious SQL patterns at the edge.
+    -   **Application Level:** The backend uses `psycopg` (via LangChain's `PGVector`), which strictly employs parameterized queries, ensuring user input is never executed as raw SQL.
+-   **Cross-Site Scripting (XSS) Protection:**
+    -   **Infrastructure Level:** Cloud Armor WAF rules (`xss-v33-stable`) detect and block malicious script injection attempts.
+    -   **Framework Level:** Streamlit (Frontend) automatically escapes HTML content by default, and the backend returns structured JSON to prevent direct script rendering.
+-   **Broken Access Control & IDOR (Insecure Direct Object Reference):**
+    -   **Verified Identity:** The backend validates OIDC ID tokens for every request, ensuring only authenticated service accounts from the frontend can invoke the core logic.
+    -   **Session Isolation:** Chat histories are cryptographically scoped to the authenticated user's identity (`user_email:session_id`), preventing IDOR attacks where one user could access another's private history.
+
+### 2. DDoS & Resource Abuse Protection
+-   **Edge Protection:** Cloud Armor implements a global rate-limiting policy (500 requests/min per IP) and a "rate-based ban" to mitigate large-scale volumetric DDoS and brute-force attacks.
+-   **Application Resilience:** The backend core utilizes `slowapi` to enforce granular rate limiting (5 requests/min per user) specifically for expensive LLM operations, protecting against cost-based denial-of-service and resource exhaustion.
+-   **Input Validation:** Pydantic models in the backend enforce a strict 10,000-character limit on user messages to prevent memory-exhaustion attacks.
+
+### 3. AI & LLM Specific Security (OWASP Top 10 for LLM)
+-   **Prompt Injection Mitigation:** The RAG prompt template uses strict structural delimiters (`----------`) and prioritized system instructions to ensure the model adheres to its enterprise role and ignores adversarial overrides contained within documents or user queries.
+-   **Sensitive Data Leakage (PII):** Google Cloud DLP (Data Loss Prevention) is integrated into the core pipeline to automatically detect and mask PII (Emails, Phones, Credit Cards) in both user input and model output in real-time.
+-   **Knowledge Base Security:** Data is stored in a private AlloyDB instance reachable only via a Serverless VPC Access connector, ensuring the "Brain" of the AI is never exposed to the public internet.
+
+### 4. Infrastructure & Secret Management
+-   **Secret Hardening:** Passwords and API keys are managed via Google Secret Manager. Terraform `lifecycle` policies prevent accidental exposure of these secrets in state files.
+-   **Network Isolation:** The Backend Agent is deployed with `INGRESS_TRAFFIC_INTERNAL_ONLY`, meaning it is invisible and unreachable from outside the project's VPC.
+-   **Secure Defaults:** `.gitignore` and `.dockerignore` are optimized to prevent the accidental leakage of `*.tfvars`, `.env`, or local credentials.
+
+## Local Development & Configuration
+
+To run the platform locally for testing, you need to set up environment variables for both components.
+
+### 1. Configuration (Environment Variables)
+
+Create a `.env` file in each agent's directory.
+
+| Variable | Location | Description |
+| :--- | :--- | :--- |
+| `PROJECT_ID` | Backend | Your Google Cloud Project ID. |
+| `REGION` | Backend | GCP region (e.g., `us-central1`). |
+| `DB_HOST` | Backend | IP of your AlloyDB instance (or `127.0.0.1` if using proxy). |
+| `DB_PASSWORD` | Backend | Database password for the `postgres` user. |
+| `DB_NAME` | Backend | Name of the database (default: `vector_store`). |
+| `BACKEND_URL` | Frontend | The URL where the backend is running. |
+
+### 2. Running the Backend Locally
+
+```bash
+cd backend-agent
+pip install -r requirements.txt
+# If accessing AlloyDB from local, start the proxy first:
+# ./cloud-sql-proxy --private-ip projects/[PROJ]/locations/[REG]/clusters/[CLUST]/instances/[INST]
+uvicorn main:app --host 0.0.0.0 --port 8080
+```
+
+### 3. Running the Frontend Locally
+
+```bash
+cd frontend-agent
+pip install -r requirements.txt
+streamlit run app.py
+```
+
+## Ingestion Pipeline: Feeding the Brain
+
+The knowledge base is populated using the `ingest.py` script.
+
+1.  **Prepare Data:** Place your PDF documents in `backend-agent/data/`.
+2.  **Initialize Database:** Connect to AlloyDB and run:
+    ```sql
+    CREATE DATABASE vector_store;
+    \c vector_store;
+    CREATE EXTENSION IF NOT EXISTS vector;
+    ```
+3.  **Run Ingestion:**
+    ```bash
+    cd backend-agent
+    python ingest.py
+    ```
+    This script will chunk your PDFs, generate embeddings using `VertexAIEmbeddings`, and store them in the `knowledge_base` table.
 
 ## Component Details
 
@@ -39,7 +107,6 @@ The platform is composed of three main layers:
 -   **Location:** `/backend-agent`
 -   **LLM:** Google Vertex AI `gemini-pro`.
 -   **Vector DB:** AlloyDB for PostgreSQL with the `vector` extension.
--   **Guardrails:** DLP-based de-identification logic in `backend-agent/chains/guardrails.py`.
 
 ### Infrastructure (Terraform)
 -   **Network:** Custom VPC with a Serverless VPC Access connector to allow Cloud Run to access the private AlloyDB instance.
