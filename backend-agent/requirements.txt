@@ -9,3 +9,6 @@ psycopg[binary] # Sync Postgres driver
 pydantic-settings
 pypdf
 langchain-community
+google-auth
+requests
+slowapi

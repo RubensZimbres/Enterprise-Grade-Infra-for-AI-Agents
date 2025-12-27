@@ -116,6 +116,10 @@ resource "google_secret_manager_secret" "ai_api_key_secret" {
 resource "google_secret_manager_secret_version" "ai_api_key_version" {
   secret      = google_secret_manager_secret.ai_api_key_secret.id
   secret_data = "CHANGE_ME_TO_REAL_API_KEY" # Placeholder
+  
+  lifecycle {
+    ignore_changes = [secret_data]
+  }
 }
 
 resource "google_secret_manager_secret_iam_member" "backend_api_key_access" {

@@ -1,14 +1,24 @@
 import logging
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 from chains.rag_chain import protected_chain_invoke
+from dependencies import get_current_user
+
+# Rate Limiting
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 # Configure Logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Initialize Limiter
+limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(title="Enterprise AI Agent", version="1.0.0")
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 class ChatRequest(BaseModel):
     session_id: str
@@ -22,15 +32,18 @@ def health_check():
     return {"status": "healthy"}
 
 @app.post("/chat", response_model=ChatResponse)
-async def chat_endpoint(request: ChatRequest):
+@limiter.limit("5/minute")
+async def chat_endpoint(request: ChatRequest, fastapi_req: Request, user_email: str = Depends(get_current_user)):
     """
     Main entry point for the Frontend Agent.
     Handles RAG, Memory, and DLP.
     """
     try:
+        # FIX (IDOR): Scope the session_id to the authenticated user
+        secure_session_id = f"{user_email}:{request.session_id}"
+
         # Invoke the chain with guardrails
-        # Note: In production, you should use .astream() for streaming responses
-        response_text = await run_in_threadpool(protected_chain_invoke, request.message, request.session_id)
+        response_text = await run_in_threadpool(protected_chain_invoke, request.message, secure_session_id)
         
         return ChatResponse(response=response_text)
     

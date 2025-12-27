@@ -147,6 +147,9 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+*.tfvars
+*.tfvars.json
+
 
 # Spyder project settings
 .spyderproject
