@@ -25,3 +25,13 @@ variable "iap_client_secret" {
   type        = string
   sensitive   = true
 }
+
+variable "billing_account" {
+  description = "The billing account ID"
+  type        = string
+}
+
+variable "notification_email" {
+  description = "Email for budget and anomaly alerts"
+  type        = string
+}

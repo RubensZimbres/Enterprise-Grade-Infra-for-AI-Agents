@@ -6,6 +6,17 @@ from pydantic import BaseModel, Field
 from chains.rag_chain import protected_chain_invoke, protected_chain_stream
 from dependencies import get_current_user
 
+# Tracing
+from opentelemetry import trace
+from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.propagate import set_global_textmap
+from opentelemetry.propagators.cloud_trace_propagator import (
+    CloudTraceFormatPropagator,
+)
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
 # Rate Limiting
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -15,9 +26,19 @@ from slowapi.errors import RateLimitExceeded
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# --- Setup Tracing ---
+set_global_textmap(CloudTraceFormatPropagator())
+tracer_provider = TracerProvider()
+cloud_trace_exporter = CloudTraceSpanExporter()
+tracer_provider.add_span_processor(BatchSpanProcessor(cloud_trace_exporter))
+trace.set_tracer_provider(tracer_provider)
+
 # Initialize Limiter
 limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(title="Enterprise AI Agent", version="1.0.0")
+
+# Instrument FastAPI
+FastAPIInstrumentor.instrument_app(app)
 
 # Add CORS Middleware
 app.add_middleware(

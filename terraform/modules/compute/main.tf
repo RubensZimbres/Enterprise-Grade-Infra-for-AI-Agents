@@ -23,10 +23,17 @@ resource "google_secret_manager_secret_iam_member" "backend_secret_access" {
   member    = "serviceAccount:${google_service_account.backend_sa.email}"
 }
 
-# Allow Backend to connect to AlloyDB
-resource "google_project_iam_member" "backend_alloydb_client" {
+# Allow Backend to connect to Cloud SQL
+resource "google_project_iam_member" "backend_cloudsql_client" {
   project = var.project_id
-  role    = "roles/alloydb.client"
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${google_service_account.backend_sa.email}"
+}
+
+# Allow Backend to use Cloud Trace
+resource "google_project_iam_member" "backend_trace_agent" {
+  project = var.project_id
+  role    = "roles/cloudtrace.agent"
   member  = "serviceAccount:${google_service_account.backend_sa.email}"
 }
 
@@ -56,8 +63,8 @@ resource "google_cloud_run_v2_service" "backend" {
     
     # SCALABILITY: Define autoscaling limits
     scaling {
-      min_instance_count = 0 
-      max_instance_count = 10 # Scalable to 50 concurrent instances
+      min_instance_count = 1 
+      max_instance_count = 20 
     }
 
     # DIRECT VPC EGRESS: Connects container to the Private Subnet
@@ -103,7 +110,7 @@ resource "google_cloud_run_v2_service" "backend" {
       }
       env {
         name  = "DB_HOST"
-        value = var.alloydb_ip
+        value = var.db_host
       }
       env {
         name = "DB_PASSWORD"
@@ -113,6 +120,10 @@ resource "google_cloud_run_v2_service" "backend" {
             version = "latest"
           }
         }
+      }
+      env {
+        name  = "REDIS_HOST"
+        value = var.redis_host
       }
     }
   }
@@ -152,10 +163,10 @@ resource "google_cloud_run_v2_service" "frontend" {
   template {
     service_account = google_service_account.frontend_sa.email
     
-    # SCALABILITY: Keep 1 instance warm to eliminate cold starts for users
+    # SCALABILITY: Define autoscaling limits
     scaling {
       min_instance_count = 1 
-      max_instance_count = 10 # Frontend scales wider to handle global traffic
+      max_instance_count = 20 
     }
 
     # Frontend also needs VPC access if it needs to talk to the Backend via internal DNS

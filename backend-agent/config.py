@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     DB_PASSWORD: str  # Injected from Secret Manager env var
     DB_NAME: str = "postgres" 
     
+    # Redis (Caching)
+    REDIS_HOST: str = "localhost"
+
     # Firestore
     FIRESTORE_COLLECTION: str = "chat_history"
 

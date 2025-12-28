@@ -2,5 +2,17 @@ variable "project_id" {}
 variable "region" {}
 variable "vpc_name" {}
 variable "subnet_name" {}
-variable "alloydb_ip" {}
-variable "db_secret_id" {}
+variable "db_host" {
+  description = "The private IP address of the Database instance"
+  type        = string
+}
+
+variable "db_secret_id" {
+  description = "The ID of the secret containing the DB password"
+  type        = string
+}
+
+variable "redis_host" {
+  description = "The host of the Redis instance"
+  type        = string
+}

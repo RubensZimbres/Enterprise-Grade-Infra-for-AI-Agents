@@ -16,6 +16,29 @@ The platform is composed of three main layers:
 2.  **Backend Agent (Neural Core):** An asynchronous **FastAPI** service orchestrating the RAG pipeline, secured by OIDC authentication and internal-only networking.
 3.  **Infrastructure (Terraform):** Fully automated deployment using "Infrastructure as Code."
 
+## AI Engine & Knowledge Core: Memory & RAG Implementation
+
+The Backend Agent is designed as a stateful, retrieval-augmented system that balances high-performance search with secure session management.
+
+### 1. Short-Term Memory (Session Context)
+*   **Storage:** Utilizes **Google Cloud Firestore** (Native Mode) for low-latency persistence of chat history.
+*   **Implementation:** Leverages `FirestoreChatMessageHistory` within the LangChain framework.
+*   **Security & Isolation:** Every session is cryptographically scoped to the authenticated user's email (`user_email:session_id`). This ensures strict multi-tenancy where users can never access or "leak" into another's conversation history (IDOR protection).
+*   **Context Injection:** The system automatically retrieves the last $N$ messages and injects them into the `history` placeholder of the RAG prompt, enabling multi-turn, context-aware dialogue.
+
+### 2. Long-Term Memory (Knowledge Base)
+*   **Vector Database:** Powered by **PostgreSQL 15** (Cloud SQL) with the `vector` extension (`pgvector`).
+*   **Retrieval Logic:** Employs semantic similarity search using `VertexAIEmbeddings` (`textembedding-gecko@003`). For every query, the engine retrieves the top **5 most relevant chunks** ($k=5$) to provide grounded context to the LLM.
+*   **Semantic Caching:** Integrated with **Redis (Memorystore)** using a `RedisSemanticCache`. If a user asks a question semantically similar to a previously cached query (threshold: 0.05), the system returns the cached response instantly, bypassing the LLM to save cost and reduce latency.
+
+### 3. RAG Specifications & Document Ingestion
+*   **Ingestion Pipeline:** A specialized `ingest.py` script handles the transformation of raw data into "AI-ready" vectors.
+*   **Smart Chunking:** Uses the `RecursiveCharacterTextSplitter` to maintain semantic integrity:
+    *   **Chunk Size:** 1000 characters/tokens.
+    *   **Chunk Overlap:** 200 characters (ensures no loss of context at the edges of chunks).
+    *   **Separators:** Prioritizes splitting by double newlines (paragraphs), then single newlines, then spaces.
+*   **Document Support:** Includes a `DirectoryLoader` with `PyPDFLoader` to automatically parse and index complex PDF structures.
+
 ## Security & Resilience: A Multi-Layered Defense
 
 This platform implements a robust, multi-layered security strategy. Following an extensive audit using the `/security:analyze` command, the codebase and infrastructure have been hardened against the following threats:
@@ -28,7 +51,7 @@ This platform implements a robust, multi-layered security strategy. Following an
     -   **Infrastructure Level:** Cloud Armor WAF rules (`xss-v33-stable`) detect and block malicious script injection attempts.
     -   **Framework Level:** Next.js (Frontend) automatically sanitizes and escapes content by default, and the backend returns structured JSON to prevent direct script rendering.
 -   **Broken Access Control & IDOR (Insecure Direct Object Reference):**
-    -   **Verified Identity:** The backend implements a hybrid authentication strategy. In production, it extracts the user's identity from the **IAP-injected** `X-Goog-Authenticated-User-Email` header. For development or internal calls, it validates OIDC ID tokens, ensuring every request is cryptographically tied to a verified user.
+    -   **Verified Identity (IAP):** The frontend acts as a **Secure Proxy**. It captures the user's identity from the **Identity-Aware Proxy (IAP)** headers (`X-Goog-Authenticated-User-Email`) and propagates it to the backend.
     -   **Session Isolation:** Chat histories are cryptographically scoped to the authenticated user's identity (`user_email:session_id`), preventing IDOR attacks where one user could access another's private history.
 
 ### 2. DDoS & Resource Abuse Protection
@@ -43,7 +66,8 @@ This platform implements a robust, multi-layered security strategy. Following an
 
 ### 4. Infrastructure & Secret Management
 -   **Secret Hardening:** Passwords and API keys are managed via Google Secret Manager. Terraform `lifecycle` policies prevent accidental exposure of these secrets in state files.
--   **Network Isolation & API Proxying:** The Backend Agent is deployed with `INGRESS_TRAFFIC_INTERNAL_ONLY`. Communication is secured by a **Next.js Server-Side API Proxy** (`/api/chat`), which routes client requests through the VPC to the backend, ensuring zero public exposure of the neural core.
+-   **Neural Core Proxying (A2A Auth):** The Backend Agent is deployed with `INGRESS_TRAFFIC_INTERNAL_ONLY`. Communication is secured by a **Server-Side API Proxy** (`/api/chat`).
+    -   **Service-to-Service OIDC:** The frontend generates short-lived OIDC ID tokens using the `google-auth-library` to authenticate itself to the backend, ensuring zero public exposure of the neural core.
 -   **Secure Defaults:** `.gitignore` and `.dockerignore` are optimized to prevent the accidental leakage of `*.tfvars`, `.env`, or local credentials.
 
 ## Enhanced Enterprise Architecture (Optimized)
@@ -85,7 +109,8 @@ The backend no longer uses a `.env` file. You must export these variables in you
 **Frontend (`frontend-nextjs/.env.local`):**
 | Variable | Description |
 | :--- | :--- |
-| `NEXT_PUBLIC_BACKEND_URL` | The URL where the backend is running (e.g. `http://localhost:8080`). |
+| `BACKEND_URL` | The internal URL of the backend (e.g. `http://localhost:8080`). Used by the server-side proxy. |
+| `NEXT_PUBLIC_BACKEND_URL` | Optional: Used only for legacy direct-call testing. |
 
 > **Note on Authentication:** The frontend currently sends a `Bearer MOCK_TOKEN_CHANGE_ME` header. To test locally with the backend, ensure your environment is configured to either ignore this token or use a valid Google ID Token.
 
@@ -126,23 +151,43 @@ The knowledge base is populated using the `ingest.py` script.
     python ingest.py
     ```
 
+### Infrastructure (Terraform)
+-   **Network (Zero-Trust):** 
+    -   **VPC Isolation:** A custom VPC with **Private Google Access**, ensuring all internal traffic stays within the Google network.
+    -   **Private Service Access (PSA):** High-speed VPC Peering for Cloud SQL, Redis, and Vertex AI.
+    -   **Cloud NAT:** Egress gateway allowing private backend instances to securely reach the internet for updates without exposing them to incoming public traffic.
+-   **Compute & Identity:** 
+    -   **Dual-Agent Deployment:** Separate Cloud Run services for Frontend and Backend, each with its own **Least-Privilege Service Account**.
+    -   **IAM Hardening:** Precise roles granted for Vertex AI (`roles/aiplatform.user`), Secret Manager (`roles/secretmanager.secretAccessor`), and Cloud SQL (`roles/cloudsql.client`).
+-   **Governance & Cost Control:**
+    -   **Automated Budgeting:** Proactive monthly budget alerts at 50%, 90%, and 100% of the target spend.
+    -   **Anomaly Detection:** Cloud Monitoring policies that trigger email alerts if error rates spike or high-severity logs are detected.
+-   **Edge Security (Ingress):** 
+    -   **Global Load Balancing:** HTTPS termination with **Managed SSL Certificates**.
+    -   **Cloud Armor WAF:** Active protection against OWASP Top 10 (SQLi, XSS) and IP-based rate limiting (500 req/min).
+    -   **Identity-Aware Proxy (IAP):** Provides a central authentication layer, ensuring only authorized enterprise users can reach the frontend.
+
 ## Component Details
 
-### Frontend (Next.js)
+### Frontend (Next.js Agent)
 -   **Location:** `/frontend-nextjs`
 -   **Tech:** React 18, Tailwind CSS, Lucide Icons.
--   **Streaming:** Fully supports real-time token streaming for low perceived latency.
+-   **Security:** Acts as a secure proxy to the Backend; holds no direct database credentials.
+-   **Scalability:** Configured with `min_instances = 1` for zero-latency response.
 
-### Backend (FastAPI)
+### Backend (FastAPI Agent)
 -   **Location:** `/backend-agent`
--   **LLM:** Google Vertex AI `gemini-3-flash-preview`.
--   **Vector DB:** AlloyDB for PostgreSQL with the `vector` extension and `asyncpg`.
+-   **Neural Core:** Orchestrates RAG using LangChain and Vertex AI.
+-   **Vector DB:** Cloud SQL for PostgreSQL 15 with `pgvector` and `asyncpg`.
+-   **Networking:** Set to `INGRESS_TRAFFIC_INTERNAL_ONLY` to ensure it is unreachable from the public internet.
 
-### Infrastructure (Terraform)
--   **Network:** Custom VPC with a Serverless VPC Access connector to allow Cloud Run to access the private AlloyDB instance.
--   **Database:** High-availability AlloyDB cluster.
--   **Compute:** Cloud Run services (`frontend-agent` and `backend-agent`) with custom Service Accounts and Least-Privilege IAM roles.
--   **Ingress:** Global Load Balancer + IAP + Managed SSL Certificates.
+### Infrastructure (Terraform Modules)
+-   **`network`**: VPC, Subnets, Cloud NAT, and PSA.
+-   **`compute`**: Cloud Run services and granular IAM policies.
+-   **`database`**: Cloud SQL (PostgreSQL) and Firestore (Chat History).
+-   **`redis`**: Memorystore for semantic caching.
+-   **`ingress`**: Global Load Balancer, IAP, Cloud Armor, and SSL.
+-   **`billing_monitoring`**: Budgets, Alert Policies, and Notification Channels.
 
 ## What To Do: A Deployment Guide for the AI Platform
 

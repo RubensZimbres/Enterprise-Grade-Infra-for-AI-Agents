@@ -13,3 +13,10 @@ langchain-community
 google-auth
 requests
 slowapi
+redis
+langchain-redis
+opentelemetry-api
+opentelemetry-sdk
+opentelemetry-exporter-gcp-trace
+opentelemetry-instrumentation-fastapi
+opentelemetry-instrumentation-requests

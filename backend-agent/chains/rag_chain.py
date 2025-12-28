@@ -4,6 +4,8 @@ from langchain_google_firestore import FirestoreChatMessageHistory
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_core.runnables import RunnableLambda
+from langchain_core.globals import set_llm_cache
+from langchain_redis import RedisSemanticCache
 from config import settings
 from .guardrails import deidentify_content
 
@@ -25,10 +27,18 @@ vector_store = PGVector(
     use_jsonb=True,
 )
 
-# 3. Setup LLM
+# 3. Setup Semantic Cache
+# This will cache LLM responses based on semantic similarity of queries
+set_llm_cache(RedisSemanticCache(
+    redis_url=f"redis://{settings.REDIS_HOST}:6379",
+    embedding=embeddings,
+    score_threshold=0.05 # Lower means more strict similarity
+))
+
+# 4. Setup LLM
 # Switch to gemini-1.5-flash for 10x lower cost and faster latency
 llm = ChatVertexAI(
-    model_name="gemini-3-flash-preview",
+    model_name="gemini-1.5-flash",
     temperature=0.3,
     project=settings.PROJECT_ID,
     location=settings.REGION

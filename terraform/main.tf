@@ -19,6 +19,15 @@ module "database" {
   depends_on = [module.network]
 }
 
+module "redis" {
+  source = "./modules/redis"
+
+  project_id = var.project_id
+  region     = var.region
+  network_id = module.network.network_id
+  depends_on = [module.network]
+}
+
 module "compute" {
   source = "./modules/compute"
 
@@ -26,9 +35,18 @@ module "compute" {
   region       = var.region
   vpc_name     = module.network.vpc_name
   subnet_name  = module.network.private_subnet_name
-  alloydb_ip   = module.database.instance_ip
+  db_host      = module.database.instance_ip
   db_secret_id = module.database.secret_id
-  depends_on   = [module.database, module.network]
+  redis_host   = module.redis.host
+  depends_on   = [module.database, module.network, module.redis]
+}
+
+module "billing_monitoring" {
+  source = "./modules/billing_monitoring"
+
+  project_id         = var.project_id
+  billing_account    = var.billing_account
+  notification_email = var.notification_email
 }
 
 module "ingress" {

@@ -1,10 +1,6 @@
-output "cluster_id" {
-  value = google_alloydb_cluster.default.id
-}
-
 output "instance_ip" {
-  description = "The private IP address of the AlloyDB instance"
-  value       = google_alloydb_instance.primary.ip_address
+  description = "The private IP address of the Cloud SQL instance"
+  value       = google_sql_database_instance.postgres.private_ip_address
 }
 
 output "secret_id" {
