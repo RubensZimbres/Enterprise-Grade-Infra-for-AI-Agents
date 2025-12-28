@@ -89,6 +89,23 @@ This platform has been upgraded for production-scale performance, cost efficienc
 - **DLP Fast-Path Guardrails:** Implemented a high-performance regex-based "pre-check" for PII. This intelligently bypasses expensive Google Cloud DLP API calls for clean content, invoking the API only when potential PII patterns are detected.
 - **Global CDN Caching:** Google Cloud CDN is enabled at the Load Balancer level to cache static assets and common frontend resources globally, reducing origin server load and improving page load times.
 
+## Performance & Scaling Roadmap
+
+The current infrastructure is designed for high efficiency and is benchmarked to handle approximately **2,500 users per hour** with the standard provisioned resources.
+
+### How to Actually Reach 1,000,000 Users per Hour
+
+To handle this load, you must change the architecture. You cannot just "scale up" the Terraform parameters.
+
+#### Solution A: Offload Vector Search (Recommended)
+Stop asking Postgres to do the math. Use a specialized engine designed for high-throughput vector search.
+
+*   **Use:** Google Vertex AI Vector Search (formerly Matching Engine).
+*   **Why:** It is fully managed and designed to handle billions of vectors and thousands of QPS with <10ms latency.
+*   **Architecture Change:**
+    *   **Postgres:** Only stores Chat History and User Metadata (cheap writes).
+    *   **Vertex AI:** Handles the 2,800 QPS vector load.
+
 ## Local Development & Configuration
 
 To run the platform locally for testing, you need to set up environment variables for both components.
