@@ -63,7 +63,7 @@ async def ingest_data():
     
     # Note: We use 'pre_delete_collection=True' to wipe old data for a clean slate.
     # In a real production incremental update, you would NOT do this.
-    print(f"💾 Ingesting into table '{settings.DB_NAME}'...")
+    print(f"💾 Ingesting into database '{settings.DB_NAME}'...")
     
     vector_store = PGVector(
         embeddings=embeddings,

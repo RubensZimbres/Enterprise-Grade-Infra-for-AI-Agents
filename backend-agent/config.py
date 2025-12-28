@@ -7,13 +7,14 @@ class Settings(BaseSettings):
     # Database (AlloyDB)
     DB_HOST: str      # Injected by Terraform
     DB_USER: str = "postgres"
-    DB_PASSWORD: str  # Injected from Secret Manager
-    DB_NAME: str = "vector_store" # You must create this DB manually or via init script
+    DB_PASSWORD: str  # Injected from Secret Manager env var
+    DB_NAME: str = "postgres" 
     
     # Firestore
     FIRESTORE_COLLECTION: str = "chat_history"
 
     class Config:
-        env_file = ".env"
+        # No env_file for production as secrets are injected as env vars
+        pass
 
 settings = Settings()

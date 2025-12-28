@@ -7,10 +7,13 @@ This repository contains a full-stack, secure AI platform deployed on Google Clo
 ![Google Cloud Architecture](images/Google_Cloud_Architecture.jpg)
 *Figure 1: Google Cloud Platform Architecture*
 
+![AWS Architecture](images/AWS_Architecture.jpg)
+*Figure 2: AWS Architecture*
+
 The platform is composed of three main layers:
 
-1.  **Frontend Agent (UI):** A Streamlit application providing a chat interface. Protected by a Global Load Balancer with Identity-Aware Proxy (IAP) and Cloud Armor.
-2.  **Backend Agent (Neural Core):** A FastAPI service orchestrating the RAG pipeline, secured by OIDC authentication and internal-only networking.
+1.  **Frontend (UI):** A modern, high-concurrency **Next.js** application providing a real-time streaming chat interface. Protected by a Global Load Balancer with Identity-Aware Proxy (IAP) and Cloud Armor.
+2.  **Backend Agent (Neural Core):** An asynchronous **FastAPI** service orchestrating the RAG pipeline, secured by OIDC authentication and internal-only networking.
 3.  **Infrastructure (Terraform):** Fully automated deployment using "Infrastructure as Code."
 
 ## Security & Resilience: A Multi-Layered Defense
@@ -20,12 +23,12 @@ This platform implements a robust, multi-layered security strategy. Following an
 ### 1. Web & Application Security (OWASP Top 10)
 -   **SQL Injection (SQLi) Protection:**
     -   **Infrastructure Level:** Google Cloud Armor is configured with pre-configured WAF rules (`sqli-v33-stable`) to filter malicious SQL patterns at the edge.
-    -   **Application Level:** The backend uses `psycopg` (via LangChain's `PGVector`), which strictly employs parameterized queries, ensuring user input is never executed as raw SQL.
+    -   **Application Level:** The backend uses **`asyncpg`** (via LangChain's `PGVector`), which strictly employs parameterized queries, ensuring user input is never executed as raw SQL.
 -   **Cross-Site Scripting (XSS) Protection:**
     -   **Infrastructure Level:** Cloud Armor WAF rules (`xss-v33-stable`) detect and block malicious script injection attempts.
-    -   **Framework Level:** Streamlit (Frontend) automatically escapes HTML content by default, and the backend returns structured JSON to prevent direct script rendering.
+    -   **Framework Level:** Next.js (Frontend) automatically sanitizes and escapes content by default, and the backend returns structured JSON to prevent direct script rendering.
 -   **Broken Access Control & IDOR (Insecure Direct Object Reference):**
-    -   **Verified Identity:** The backend validates OIDC ID tokens for every request, ensuring only authenticated service accounts from the frontend can invoke the core logic.
+    -   **Verified Identity:** The backend implements a hybrid authentication strategy. In production, it extracts the user's identity from the **IAP-injected** `X-Goog-Authenticated-User-Email` header. For development or internal calls, it validates OIDC ID tokens, ensuring every request is cryptographically tied to a verified user.
     -   **Session Isolation:** Chat histories are cryptographically scoped to the authenticated user's identity (`user_email:session_id`), preventing IDOR attacks where one user could access another's private history.
 
 ### 2. DDoS & Resource Abuse Protection
@@ -35,13 +38,27 @@ This platform implements a robust, multi-layered security strategy. Following an
 
 ### 3. AI & LLM Specific Security (OWASP Top 10 for LLM)
 -   **Prompt Injection Mitigation:** The RAG prompt template uses strict structural delimiters (`----------`) and prioritized system instructions to ensure the model adheres to its enterprise role and ignores adversarial overrides contained within documents or user queries.
--   **Sensitive Data Leakage (PII):** Google Cloud DLP (Data Loss Prevention) is integrated into the core pipeline to automatically detect and mask PII (Emails, Phones, Credit Cards) in both user input and model output in real-time.
+-   **Sensitive Data Leakage (PII):** Google Cloud DLP (Data Loss Prevention) is integrated into the core pipeline with a **Regex Fast-Path** and **Asynchronous Threading**. This automatically detects and masks PII in real-time without blocking the main event loop, ensuring high performance while minimizing API costs.
 -   **Knowledge Base Security:** Data is stored in a private AlloyDB instance reachable only via a Serverless VPC Access connector, ensuring the "Brain" of the AI is never exposed to the public internet.
 
 ### 4. Infrastructure & Secret Management
 -   **Secret Hardening:** Passwords and API keys are managed via Google Secret Manager. Terraform `lifecycle` policies prevent accidental exposure of these secrets in state files.
--   **Network Isolation:** The Backend Agent is deployed with `INGRESS_TRAFFIC_INTERNAL_ONLY`, meaning it is invisible and unreachable from outside the project's VPC.
+-   **Network Isolation & API Proxying:** The Backend Agent is deployed with `INGRESS_TRAFFIC_INTERNAL_ONLY`. Communication is secured by a **Next.js Server-Side API Proxy** (`/api/chat`), which routes client requests through the VPC to the backend, ensuring zero public exposure of the neural core.
 -   **Secure Defaults:** `.gitignore` and `.dockerignore` are optimized to prevent the accidental leakage of `*.tfvars`, `.env`, or local credentials.
+
+## Enhanced Enterprise Architecture (Optimized)
+
+This platform has been upgraded for production-scale performance, cost efficiency, and sub-second perceived latency:
+
+### Cost Control
+- **Gemini 3 Flash:** Switched to the high-efficiency Flash model (`gemini-3-flash-preview`) to reduce token costs by ~10x compared to Gemini Pro.
+- **DLP Fast-Path Guardrails:** Implemented a regex-based "pre-check" for PII. This avoids expensive Google Cloud DLP API calls for every request, invoking the API only when potential PII patterns are detected.
+
+### Latency Optimization
+- **Asynchronous I/O:** Backend fully migrated to `asyncpg` for non-blocking database operations and **asynchronous thread pooling** for DLP API calls.
+- **Secure Server-Side Proxy:** The frontend routes requests to the backend via a Next.js API Route. This allows the frontend to stay strictly client-side for the UI while leveraging a secure server-side hop to reach the private VPC backend.
+- **Real-time Streaming:** Implemented Server-Sent Events (SSE) from the LLM through to the Next.js frontend, providing immediate feedback (Time-To-First-Token).
+- **Stateless Next.js:** High-concurrency frontend significantly reduces server-side memory pressure compared to Streamlit.
 
 ## Local Development & Configuration
 
@@ -49,33 +66,42 @@ To run the platform locally for testing, you need to set up environment variable
 
 ### 1. Configuration (Environment Variables)
 
-Create a `.env` file in each agent's directory.
+**Backend (`backend-agent`):**
+The backend no longer uses a `.env` file. You must export these variables in your terminal session or use a tool like `direnv`.
 
-| Variable | Location | Description |
-| :--- | :--- | :--- |
-| `PROJECT_ID` | Backend | Your Google Cloud Project ID. |
-| `REGION` | Backend | GCP region (e.g., `us-central1`). |
-| `DB_HOST` | Backend | IP of your AlloyDB instance (or `127.0.0.1` if using proxy). |
-| `DB_PASSWORD` | Backend | Database password for the `postgres` user. |
-| `DB_NAME` | Backend | Name of the database (default: `vector_store`). |
-| `BACKEND_URL` | Frontend | The URL where the backend is running. |
+| Variable | Description |
+| :--- | :--- |
+| `PROJECT_ID` | Your Google Cloud Project ID. |
+| `REGION` | GCP region (e.g., `us-central1`). |
+| `DB_HOST` | IP of your AlloyDB instance (or `localhost` if using proxy). |
+| `DB_PASSWORD` | Database password (mapped from Secret Manager in prod). |
+| `DB_NAME` | Name of the database (default: `postgres`). |
+
+**Frontend (`frontend-nextjs/.env.local`):**
+| Variable | Description |
+| :--- | :--- |
+| `NEXT_PUBLIC_BACKEND_URL` | The URL where the backend is running (e.g. `http://localhost:8080`). |
+
+> **Note on Authentication:** The frontend currently sends a `Bearer MOCK_TOKEN_CHANGE_ME` header. To test locally with the backend, ensure your environment is configured to either ignore this token or use a valid Google ID Token.
 
 ### 2. Running the Backend Locally
 
 ```bash
 cd backend-agent
 pip install -r requirements.txt
-# If accessing AlloyDB from local, start the proxy first:
-# ./cloud-sql-proxy --private-ip projects/[PROJ]/locations/[REG]/clusters/[CLUST]/instances/[INST]
+# Export your variables
+export PROJECT_ID="your-project"
+export REGION="us-central1"
+# ... etc
 uvicorn main:app --host 0.0.0.0 --port 8080
 ```
 
 ### 3. Running the Frontend Locally
 
 ```bash
-cd frontend-agent
-pip install -r requirements.txt
-streamlit run app.py
+cd frontend-nextjs
+npm install
+npm run dev
 ```
 
 ## Ingestion Pipeline: Feeding the Brain
@@ -94,24 +120,23 @@ The knowledge base is populated using the `ingest.py` script.
     cd backend-agent
     python ingest.py
     ```
-    This script will chunk your PDFs, generate embeddings using `VertexAIEmbeddings`, and store them in the `knowledge_base` table.
 
 ## Component Details
 
-### Frontend (Streamlit)
--   **Location:** `/frontend-agent`
--   **Auth:** Generates OIDC tokens using `google-auth` to call the backend securely.
--   **State:** Manages session-based chat history locally and syncs with the backend.
+### Frontend (Next.js)
+-   **Location:** `/frontend-nextjs`
+-   **Tech:** React 18, Tailwind CSS, Lucide Icons.
+-   **Streaming:** Fully supports real-time token streaming for low perceived latency.
 
 ### Backend (FastAPI)
 -   **Location:** `/backend-agent`
--   **LLM:** Google Vertex AI `gemini-pro`.
--   **Vector DB:** AlloyDB for PostgreSQL with the `vector` extension.
+-   **LLM:** Google Vertex AI `gemini-3-flash-preview`.
+-   **Vector DB:** AlloyDB for PostgreSQL with the `vector` extension and `asyncpg`.
 
 ### Infrastructure (Terraform)
 -   **Network:** Custom VPC with a Serverless VPC Access connector to allow Cloud Run to access the private AlloyDB instance.
 -   **Database:** High-availability AlloyDB cluster.
--   **Compute:** Cloud Run services with custom Service Accounts and Least-Privilege IAM roles.
+-   **Compute:** Cloud Run services (`frontend-agent` and `backend-agent`) with custom Service Accounts and Least-Privilege IAM roles.
 -   **Ingress:** Global Load Balancer + IAP + Managed SSL Certificates.
 
 ## What To Do: A Deployment Guide for the AI Platform
@@ -279,9 +304,9 @@ Terraform has set up the infrastructure, but it uses a placeholder "hello world"
 # Deploy the backend agent
 gcloud builds submit --config cloudbuild-backend.yaml .
 
-# Deploy the frontend agent (assuming a similar cloudbuild-frontend.yaml exists)
+# Deploy the Next.js frontend
 gcloud builds submit --config cloudbuild-frontend.yaml .
 ```
-**Reasoning:** This is the final step that replaces the placeholder services with your actual Streamlit and FastAPI applications, making the platform live.
+**Reasoning:** This is the final step that replaces the placeholder services with your actual Next.js and FastAPI applications, making the platform live.
 
 By following these steps in order, you can systematically address the most common permission and connectivity gaps, leading to a successful and secure deployment.

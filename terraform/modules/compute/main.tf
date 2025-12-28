@@ -47,7 +47,7 @@ resource "google_project_iam_member" "backend_firestore_user" {
 # --- 3. The Backend Service (The Brain) ---
 
 resource "google_cloud_run_v2_service" "backend" {
-  name     = "${var.project_id}-backend"
+  name     = "backend-agent"
   location = var.region
   ingress  = "INGRESS_TRAFFIC_INTERNAL_ONLY" # Locked down. Only reachable via VPC/Internal.
 
@@ -79,6 +79,14 @@ resource "google_cloud_run_v2_service" "backend" {
         }
       }
 
+      env {
+        name  = "PROJECT_ID"
+        value = var.project_id
+      }
+      env {
+        name  = "REGION"
+        value = var.region
+      }
       env {
           name  = "DB_USER"
           value = "postgres" 
@@ -131,7 +139,7 @@ resource "google_secret_manager_secret_iam_member" "backend_api_key_access" {
 # --- 4. The Frontend Service (The Face) ---
 
 resource "google_cloud_run_v2_service" "frontend" {
-  name     = "${var.project_id}-frontend"
+  name     = "frontend-agent"
   location = var.region
   ingress  = "INGRESS_TRAFFIC_ALL" # Accepts traffic from ALB (or public for now)
 
@@ -152,7 +160,7 @@ resource "google_cloud_run_v2_service" "frontend" {
       image = "us-docker.pkg.dev/cloudrun/container/hello"
       
       env {
-        name  = "BACKEND_URL"
+        name  = "NEXT_PUBLIC_BACKEND_URL"
         value = google_cloud_run_v2_service.backend.uri
       }
     }

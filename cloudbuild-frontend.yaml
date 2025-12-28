@@ -4,13 +4,13 @@ substitutions:
   _SERVICE_NAME: "frontend-agent"
 
 steps:
-  # 1. Build the Container Image using the Dockerfile in frontend-agent/
+  # 1. Build the Container Image using the Dockerfile in frontend-nextjs/
   - name: 'gcr.io/cloud-builders/docker'
     args: 
       - 'build'
       - '-t'
       - '$_AR_HOSTNAME/$PROJECT_ID/cloud-run-source-deploy/frontend:$COMMIT_SHA'
-      - './frontend-agent'
+      - './frontend-nextjs'
     id: 'Build Frontend'
 
   # 2. Push the Image to Artifact Registry

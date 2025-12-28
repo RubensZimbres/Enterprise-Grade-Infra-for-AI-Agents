@@ -15,8 +15,8 @@ embeddings = VertexAIEmbeddings(
 )
 
 # 2. Setup AlloyDB Vector Store
-# Connection string for psycopg (Sync)
-connection_string = f"postgresql+psycopg://{settings.DB_USER}:{settings.DB_PASSWORD}@{settings.DB_HOST}:5432/{settings.DB_NAME}"
+# Connection string for asyncpg
+connection_string = f"postgresql+asyncpg://{settings.DB_USER}:{settings.DB_PASSWORD}@{settings.DB_HOST}:5432/{settings.DB_NAME}"
 
 vector_store = PGVector(
     embeddings=embeddings,
@@ -26,8 +26,9 @@ vector_store = PGVector(
 )
 
 # 3. Setup LLM
+# Switch to gemini-1.5-flash for 10x lower cost and faster latency
 llm = ChatVertexAI(
-    model_name="gemini-pro",
+    model_name="gemini-3-flash-preview",
     temperature=0.3,
     project=settings.PROJECT_ID,
     location=settings.REGION
@@ -85,16 +86,36 @@ conversational_rag_chain = RunnableWithMessageHistory(
 )
 
 # 7. Add Guardrails (DLP)
-def protected_chain_invoke(input_text: str, session_id: str):
+async def protected_chain_invoke(input_text: str, session_id: str):
+    """
+    Asynchronously invokes the RAG chain with DLP guardrails.
+    """
     # Step A: Sanitize Input
-    safe_input = deidentify_content(input_text, settings.PROJECT_ID)
+    safe_input = await deidentify_content(input_text, settings.PROJECT_ID)
     
-    # Step B: Run Chain
-    response = conversational_rag_chain.invoke(
+    # Step B: Run Chain asynchronously
+    response = await conversational_rag_chain.ainvoke(
         {"question": safe_input},
         config={"configurable": {"session_id": session_id}}
     )
     
     # Step C: Sanitize Output
-    safe_output = deidentify_content(response.content, settings.PROJECT_ID)
+    safe_output = await deidentify_content(response.content, settings.PROJECT_ID)
     return safe_output
+
+async def protected_chain_stream(input_text: str, session_id: str):
+    """
+    Asynchronously streams the RAG chain response.
+    Note: For production, consider buffering or chunk-based DLP for output.
+    """
+    # Step A: Sanitize Input
+    safe_input = await deidentify_content(input_text, settings.PROJECT_ID)
+    
+    # Step B: Stream Chain
+    async for chunk in conversational_rag_chain.astream(
+        {"question": safe_input},
+        config={"configurable": {"session_id": session_id}}
+    ):
+        # We yield the content of the chunk
+        if chunk:
+            yield chunk.content
