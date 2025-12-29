@@ -29,9 +29,23 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Extract User Identity Token (Firebase) from Client Request
+    const userAuthToken = req.headers.get('Authorization');
+    if (!userAuthToken) {
+        return NextResponse.json(
+            { error: 'Unauthorized: Missing User Token' },
+            { status: 401 }
+        );
+    }
+    // Remove "Bearer " prefix if present to be clean, but usually headers forward it as is. 
+    // We will forward it in X-Firebase-Token, which expects the raw token in our backend logic? 
+    // Backend logic: `decoded_token = auth.verify_id_token(x_firebase_token)`
+    // verify_id_token expects just the token string.
+    const firebaseToken = userAuthToken.replace('Bearer ', '');
+
     console.log(`Forwarding request to: ${backendUrl}/stream`);
 
-    // Get service-to-service auth headers if not on localhost
+    // Get Service-to-Service OIDC auth headers (Identity of the Frontend Service)
     let serviceAuthHeaders = {};
     if (!backendUrl.includes('localhost')) {
       try {
@@ -41,7 +55,6 @@ export async function POST(req: NextRequest) {
         console.log('Generated Service-to-Service OIDC token');
       } catch (err) {
         console.error('Failed to get service-to-service ID token:', err);
-        // We continue anyway, as IAP or other checks might still fail downstream
       }
     }
 
@@ -50,15 +63,14 @@ export async function POST(req: NextRequest) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        // Attach the service-to-service ID token (Authorization: Bearer <ID_TOKEN>)
+        
+        // 1. Service Identity (Who is calling? The Frontend Service)
+        // Uses standard Authorization: Bearer <OIDC_TOKEN>
         ...serviceAuthHeaders,
-        // Forward IAP identity headers (Google Cloud) if they exist (for user context)
-        ...(req.headers.get('X-Goog-Authenticated-User-Email') && {
-          'X-Goog-Authenticated-User-Email': req.headers.get('X-Goog-Authenticated-User-Email')!,
-        }),
-        ...(req.headers.get('X-Goog-Authenticated-User-Id') && {
-          'X-Goog-Authenticated-User-Id': req.headers.get('X-Goog-Authenticated-User-Id')!,
-        }),
+
+        // 2. User Identity (Who is the user? The Firebase User)
+        // Passed in a custom header to avoid conflict with Service Identity
+        'X-Firebase-Token': firebaseToken,
       },
       body: JSON.stringify(body),
     });
@@ -66,6 +78,9 @@ export async function POST(req: NextRequest) {
     if (!response.ok) {
       const errorText = await response.text().catch(() => 'Unknown error');
       console.error(`Backend error: ${response.status} - ${errorText}`);
+      if (response.status === 401) {
+           return NextResponse.json({ error: 'Unauthorized Backend Access' }, { status: 401 });
+      }
       return NextResponse.json(
         { error: `Backend error: ${errorText}` },
         { status: response.status }
@@ -93,7 +108,6 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error('Proxy error:', error);
 
-    // Handle specific error types
     if (error instanceof TypeError && error.message.includes('fetch')) {
       return NextResponse.json(
         { error: 'Unable to connect to backend service' },
@@ -108,7 +122,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// Optional: Handle OPTIONS for CORS preflight
+// Handle OPTIONS for CORS preflight
 export async function OPTIONS() {
   return new Response(null, {
     status: 204,

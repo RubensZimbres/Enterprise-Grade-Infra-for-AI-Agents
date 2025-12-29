@@ -1,6 +1,6 @@
 # From PoC to Production: Enterprise AI Platform with RAG and Guardrails
 
-This repository contains a full-stack, secure AI platform deployed on Google Cloud via Terraform. It enables private, internal document chat with enterprise-grade security and automated PII protection.
+This repository contains a full-stack, secure AI platform deployed on Google Cloud via Terraform. It enables secure, RAG-based chat with enterprise-grade security and automated PII protection, now accessible to public users via Firebase Authentication.
 
 ## Architecture Overview
 
@@ -12,17 +12,17 @@ This repository contains a full-stack, secure AI platform deployed on Google Clo
 
 The platform is composed of three main layers:
 
-1.  **Frontend (UI):** A modern, high-concurrency **Next.js** application providing a real-time streaming chat interface. Protected by a Global Load Balancer with Identity-Aware Proxy (IAP) and Cloud Armor.
-2.  **Backend Agent (Neural Core):** An asynchronous **FastAPI** service orchestrating the RAG pipeline, secured by OIDC authentication and internal-only networking.
+1.  **Frontend (UI):** A modern, high-concurrency **Next.js** application providing a real-time streaming chat interface. Accessible publicly via Global Load Balancer, secured by Firebase Authentication.
+2.  **Backend Agent (Neural Core):** An asynchronous **FastAPI** service orchestrating the RAG pipeline, secured by internal-only networking and Firebase Token verification.
 3.  **Infrastructure (Terraform):** Fully automated deployment using "Infrastructure as Code."
 
 ## Architecture Decisions & Rationale
 
-### 1. Authentication: Google Identity (IAP) vs. Firebase
-I explicitly chose **Identity-Aware Proxy (IAP)** over Firebase Authentication for this enterprise architecture.
-*   **Zero-Code Auth:** IAP handles the entire login flow (OIDC, 2FA, session management) at the infrastructure level (Load Balancer) before the request ever reaches the container. This eliminates the need for complex auth logic in the application code.
-*   **Zero Trust:** It enforces a "Zero Trust" model where access is granted based on identity and context at the edge, rather than just at the application level.
-*   **Enterprise Integration:** It integrates seamlessly with Google Workspace identities, making it ideal for internal enterprise tools.
+### 1. Authentication: Firebase Authentication
+I chose **Firebase Authentication** to provide a flexible "Public Door" for the application while maintaining security.
+*   **Broad Access:** Allows users to sign in with Google, Microsoft (Hotmail/Outlook), Email/Password, and other providers, making the platform accessible to external users, not just internal employees.
+*   **Application-Level Security:** Authentication is handled by the application logic (Frontend & Backend) using the Firebase SDK, replacing the previous infrastructure-level IAP barrier.
+*   **Session Management:** Firebase handles secure session management and token refreshing on the client side.
 
 ### 2. Communication: Asyncio vs. Pub/Sub
 While Pub/Sub is excellent for decoupled, asynchronous background tasks, I utilize **Python's `asyncio`** within FastAPI for the chat interface.
@@ -70,8 +70,8 @@ This platform implements a robust, multi-layered security strategy. The codebase
     -   **Infrastructure Level:** Cloud Armor WAF rules (`xss-v33-stable`) detect and block malicious script injection attempts.
     -   **Framework Level:** Next.js (Frontend) automatically sanitizes and escapes content by default, and the backend returns structured JSON to prevent direct script rendering.
 -   **Broken Access Control & IDOR (Insecure Direct Object Reference):**
-    -   **Verified Identity (IAP):** The frontend acts as a **Secure Proxy**. It captures the user's identity from the **Identity-Aware Proxy (IAP)** headers (`X-Goog-Authenticated-User-Email`) and propagates it to the backend.
-    -   **Session Isolation:** Chat histories are cryptographically scoped to the authenticated user's identity (`user_email:session_id`), preventing IDOR attacks where one user could access another's private history.
+    -   **Verified Identity (Firebase):** The frontend authenticates users via Firebase and passes a verified JWT (`X-Firebase-Token`) to the backend.
+    -   **Session Isolation:** Chat histories are cryptographically scoped to the authenticated user's email (`user_email:session_id`), preventing IDOR attacks.
 
 ### 2. DDoS & Resource Abuse Protection
 -   **Edge Protection:** Cloud Armor implements a global rate-limiting policy (500 requests/min per IP) and a "rate-based ban" to mitigate large-scale volumetric DDoS and brute-force attacks.
@@ -86,7 +86,8 @@ This platform implements a robust, multi-layered security strategy. The codebase
 ### 4. Infrastructure & Secret Management
 -   **Secret Hardening:** Passwords and API keys are managed via Google Secret Manager. Terraform `lifecycle` policies prevent accidental exposure of these secrets in state files.
 -   **Neural Core Proxying (A2A Auth):** The Backend Agent is deployed with `INGRESS_TRAFFIC_INTERNAL_ONLY`. Communication is secured by a **Service-Side API Proxy** (`/api/chat`).
-    -   **Service-to-Service OIDC:** The frontend generates short-lived OIDC ID tokens using the `google-auth-library` to authenticate itself to the backend, ensuring zero public exposure of the neural core.
+    -   **Service-to-Service OIDC:** The frontend generates short-lived OIDC ID tokens using the `google-auth-library` to authenticate itself to the backend infrastructure.
+    -   **User Identity:** The frontend passes the Firebase ID token for application-level user verification.
 -   **Secure Defaults:** `.gitignore` and `.dockerignore` are optimized to prevent the accidental leakage of `*.tfvars`, `.env`, or local credentials.
 
 ## Enhanced Enterprise Architecture (Optimized)
@@ -149,9 +150,14 @@ The backend does not use a `.env` file. You must export the variables in your te
 | Variable | Description |
 | :--- | :--- |
 | `BACKEND_URL` | The internal URL of the backend (e.g. `http://localhost:8080`). Used by the server-side proxy. |
-| `NEXT_PUBLIC_BACKEND_URL` | Optional: Used only for legacy direct-call testing. |
+| `NEXT_PUBLIC_FIREBASE_API_KEY` | Firebase API Key. |
+| `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | Firebase Auth Domain. |
+| `NEXT_PUBLIC_FIREBASE_PROJECT_ID` | Firebase Project ID. |
+| `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` | Firebase Storage Bucket. |
+| `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | Firebase Messaging Sender ID. |
+| `NEXT_PUBLIC_FIREBASE_APP_ID` | Firebase App ID. |
 
-> **Note on Authentication:** The frontend sends a `Bearer MOCK_TOKEN_CHANGE_ME` header. To test locally with the backend, ensure your environment is configured to either ignore this token or use a valid Google ID Token.
+> **Note on Authentication:** The frontend now uses Firebase. For local backend testing, you can use the `Bearer MOCK_TOKEN` header if `DEBUG=true` is set on the backend.
 
 ### 2. Running the Backend Locally
 
@@ -174,7 +180,6 @@ uvicorn main:app --host 0.0.0.0 --port 8080
 cd frontend-nextjs
 npm install
 npm audit fix --force
-npm install autoprefixer --save-dev
 npm run dev
 ```
 
@@ -224,14 +229,13 @@ The knowledge base is populated via an automated **Event-Driven Pipeline** using
 -   **Edge Security (Ingress):**
     -   **Global Load Balancing:** HTTPS termination with **Managed SSL Certificates**.
     -   **Cloud Armor WAF:** Active protection against OWASP Top 10 (SQLi, XSS) and IP-based rate limiting (500 req/min).
-    -   **Identity-Aware Proxy (IAP):** Provides a central authentication layer, ensuring only authorized enterprise users can reach the frontend.
 
 ## Component Details
 
 ### Frontend (Next.js Agent)
 -   **Location:** `/frontend-nextjs`
--   **Tech:** React 18, Tailwind CSS, Lucide Icons.
--   **Security:** Acts as a secure proxy to the Backend; holds no direct database credentials.
+-   **Tech:** React 18, Tailwind CSS, Lucide Icons, Firebase.
+-   **Security:** Acts as a secure proxy to the Backend; Authentication handled via Firebase.
 -   **Scalability:** Configured with `min_instances = 1` for zero-latency response.
 
 ### Backend (FastAPI Agent)
@@ -245,7 +249,7 @@ The knowledge base is populated via an automated **Event-Driven Pipeline** using
 -   **`compute`**: Cloud Run services and granular IAM policies.
 -   **`database`**: Cloud SQL (PostgreSQL) and Firestore (Chat History).
 -   **`redis`**: Memorystore for semantic caching.
--   **`ingress`**: Global Load Balancer, IAP, Cloud Armor, and SSL.
+-   **`ingress`**: Global Load Balancer, Cloud Armor, and SSL.
 -   **`billing_monitoring`**: Budgets, Alert Policies, and Notification Channels.
 
 ## What To Do: A Deployment Guide for the AI Platform
@@ -295,7 +299,6 @@ gcloud services enable \
   firestore.googleapis.com \
   serviceusage.googleapis.com \
   servicenetworking.googleapis.com \
-  iap.googleapis.com \
   dlp.googleapis.com
 ```
 
@@ -333,30 +336,25 @@ gcloud projects add-iam-policy-binding $(gcloud config get-value project) \
   --role="roles/dlp.user"
 ```
 
-### 1.6. Configure IAP OAuth Consent Screen (Manual UI Step)
+### 1.6. Configure Firebase Project (Manual UI Step)
 
-The Terraform configuration for the load balancer uses Identity-Aware Proxy (IAP), which requires an OAuth Client ID and Secret. This is a **manual, one-time setup** in the Google Cloud Console.
+Authentication is now handled by Firebase. This is a **manual, one-time setup**.
 
-1.  **Navigate to the OAuth Consent Screen:**
-    *   Go to [APIs & Services -> OAuth consent screen](https://console.cloud.google.com/apis/credentials/consent) in the GCP Console.
-2.  **Configure the Consent Screen:**
-    *   Choose **Internal** for the User Type and click **Create**.
-    *   Fill in the required fields:
-        *   **App name:** `AI Platform` (or your preferred name).
-        *   **User support email:** Your email address.
-        *   **Developer contact information:** Your email address.
-    *   Click **Save and Continue** through the rest of the sections.
-3.  **Create OAuth 2.0 Client ID:**
-    *   Go to [APIs & Services -> Credentials](https://console.cloud.google.com/apis/credentials).
-    *   Click **+ CREATE CREDENTIALS** and select **OAuth client ID**.
-    *   Select **Web application** for the Application type.
-    *   Give it a name, like `iap-load-balancer-client`.
-    *   Click **Create**.
-4.  **Save the Client ID and Secret:**
-    *   A dialog will appear with your **Client ID** and **Client Secret**.
-    *   Copy these values and place them into your `terraform.tfvars` file for the `iap_client_id` and `iap_client_secret` variables.
-
-**IAP:** secures your frontend by requiring Google authentication. This process associates your application with a valid identity in your Google Cloud organization. Terraform cannot perform these actions, as they require interactive consent. This step must be completed before you can run `terraform apply`.
+1.  **Go to Firebase Console:**
+    *   Navigate to [console.firebase.google.com](https://console.firebase.google.com).
+    *   Add a new project or select your existing Google Cloud project.
+2.  **Enable Authentication:**
+    *   Go to **Build -> Authentication**.
+    *   Click **Get Started**.
+    *   Go to **Sign-in method** tab.
+    *   Enable **Email/Password**.
+    *   Enable **Google**.
+    *   Enable **Microsoft** (for Hotmail/Outlook users).
+3.  **Register Web App:**
+    *   Click the **Gear icon** (Project settings).
+    *   Scroll to **Your apps**.
+    *   Click the **</> (Web)** icon to register your app.
+    *   Copy the `firebaseConfig` keys. You will need these for your local environment (`.env.local`) and your CI/CD pipeline.
 
 ---
 

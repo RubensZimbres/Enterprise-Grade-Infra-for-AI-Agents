@@ -20,3 +20,4 @@ opentelemetry-sdk
 opentelemetry-exporter-gcp-trace
 opentelemetry-instrumentation-fastapi
 opentelemetry-instrumentation-requests
+firebase-admin

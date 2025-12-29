@@ -56,8 +56,6 @@ module "ingress" {
   region                = var.region
   frontend_service_name = module.compute.frontend_name
   domain_name           = var.domain_name
-  iap_client_id         = var.iap_client_id
-  iap_client_secret     = var.iap_client_secret
   depends_on            = [module.compute]
 }
 
