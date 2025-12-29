@@ -4,18 +4,12 @@
 resource "google_compute_security_policy" "security_policy" {
   name = "${var.project_id}-security-policy"
 
-  # Rule 1: Allow everything else (Default Action)
-  # In a real high-security setup, you might default to DENY and allowlist IPs.
-  rule {
-    action   = "allow"
-    priority = "2147483647"
-    match {
-      versioned_expr = "SRC_IPS_V1"
-      config {
-        src_ip_ranges = ["*"]
-      }
+  # Adaptive Protection: Uses ML to detect and block L7 DDoS attacks
+  adaptive_protection_config {
+    layer_7_ddos_defense_config {
+      enable = true
+      rule_visibility = "STANDARD"
     }
-    description = "Default allow rule"
   }
 
   # Rule 1: Block SQL Injection (OWASP)
@@ -42,7 +36,55 @@ resource "google_compute_security_policy" "security_policy" {
     description = "Block XSS"
   }
 
-  # Rule 2: Rate Limiting (Prevent DDoS/Brute Force)
+  # Rule 3: Block Local File Inclusion (LFI)
+  rule {
+    action   = "deny(403)"
+    priority = 1002
+    match {
+      expr {
+        expression = "evaluatePreconfiguredExpr('lfi-v33-stable')"
+      }
+    }
+    description = "Block Local File Inclusion"
+  }
+
+  # Rule 4: Block Remote Command Execution (RCE)
+  rule {
+    action   = "deny(403)"
+    priority = 1003
+    match {
+      expr {
+        expression = "evaluatePreconfiguredExpr('rce-v33-stable')"
+      }
+    }
+    description = "Block Remote Command Execution"
+  }
+
+  # Rule 5: Block Protocol Attacks (HTTP Smuggling etc)
+  rule {
+    action   = "deny(403)"
+    priority = 1004
+    match {
+      expr {
+        expression = "evaluatePreconfiguredExpr('protocolattack-v33-stable')"
+      }
+    }
+    description = "Block Protocol Attacks"
+  }
+
+  # Rule 6: Block Known Scanner IPs (Nmap, Nessus etc)
+  rule {
+    action   = "deny(403)"
+    priority = 1005
+    match {
+      expr {
+        expression = "evaluatePreconfiguredExpr('scannerdetection-v33-stable')"
+      }
+    }
+    description = "Block Scanner Detection"
+  }
+
+  # Rule 10: Rate Limiting (Prevent DDoS/Brute Force)
   rule {
     action   = "rate_based_ban"
     priority = "2000"
@@ -65,8 +107,19 @@ resource "google_compute_security_policy" "security_policy" {
     }
     description = "Rate limit to prevent abuse"
   }
-  
-  # TODO: Add rules for SQLi and XSS protection here
+
+  # Default Rule: Allow everything else
+  rule {
+    action   = "allow"
+    priority = "2147483647"
+    match {
+      versioned_expr = "SRC_IPS_V1"
+      config {
+        src_ip_ranges = ["*"]
+      }
+    }
+    description = "Default allow rule"
+  }
 }
 
 # --- 2. The Address: Global Static IP ---

@@ -7,7 +7,7 @@ from langchain_core.runnables import RunnableLambda
 from langchain_core.globals import set_llm_cache
 from langchain_redis import RedisSemanticCache
 from config import settings
-from .guardrails import deidentify_content
+from .guardrails import deidentify_content, check_security
 
 # 1. Setup Embeddings
 embeddings = VertexAIEmbeddings(
@@ -95,37 +95,46 @@ conversational_rag_chain = RunnableWithMessageHistory(
     history_messages_key="history",
 )
 
-# 7. Add Guardrails (DLP)
+# 7. Add Guardrails (Security + DLP)
 async def protected_chain_invoke(input_text: str, session_id: str):
     """
-    Asynchronously invokes the RAG chain with DLP guardrails.
+    Asynchronously invokes the RAG chain with Security Judge and DLP guardrails.
     """
-    # Step A: Sanitize Input
+    # Step A: Security Check (Expert Judge)
+    security_check = await check_security(input_text)
+    if security_check == "BLOCKED":
+        return "I'm sorry, but I cannot process this request due to security policy violations."
+
+    # Step B: Sanitize Input (DLP)
     safe_input = await deidentify_content(input_text, settings.PROJECT_ID)
     
-    # Step B: Run Chain asynchronously
+    # Step C: Run Chain asynchronously
     response = await conversational_rag_chain.ainvoke(
         {"question": safe_input},
         config={"configurable": {"session_id": session_id}}
     )
     
-    # Step C: Sanitize Output
+    # Step D: Sanitize Output
     safe_output = await deidentify_content(response.content, settings.PROJECT_ID)
     return safe_output
 
 async def protected_chain_stream(input_text: str, session_id: str):
     """
-    Asynchronously streams the RAG chain response.
-    Note: For production, consider buffering or chunk-based DLP for output.
+    Asynchronously streams the RAG chain response with security checks.
     """
-    # Step A: Sanitize Input
+    # Step A: Security Check
+    security_check = await check_security(input_text)
+    if security_check == "BLOCKED":
+        yield "I'm sorry, but I cannot process this request due to security policy violations."
+        return
+
+    # Step B: Sanitize Input
     safe_input = await deidentify_content(input_text, settings.PROJECT_ID)
     
-    # Step B: Stream Chain
+    # Step C: Stream Chain
     async for chunk in conversational_rag_chain.astream(
         {"question": safe_input},
         config={"configurable": {"session_id": session_id}}
     ):
-        # We yield the content of the chunk
         if chunk:
             yield chunk.content
