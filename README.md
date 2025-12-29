@@ -137,7 +137,7 @@ The backend does not use a `.env` file. You must export the variables in your te
 ### 2. Running the Backend Locally
 
 ```bash
-python -m venv myenv
+python3 -m venv myenv
 source myenv/bin/activate
 pip install -r requirements.txt
 # Export your variables
@@ -158,6 +158,9 @@ npm audit fix --force
 npm install autoprefixer --save-dev
 npm run dev
 ```
+
+<img src="https://raw.githubusercontent.com/RubensZimbres/my-ai-platform/main/images/frontend.jpg" width="600" />
+
 
 ## Ingestion Pipeline
 
