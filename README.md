@@ -1,6 +1,6 @@
-# From PoC to Production: Enterprise AI Platform with RAG and Guardrails in Google Cloud Deployed via Terraform
+# From PoC to Production: Enterprise AI Platform with RAG and Guardrails
 
-This repository contains a full-stack, secure AI platform deployed on Google Cloud. It enables private, internal document chat with enterprise-grade security and automated PII protection, deployed via Terraform and Cloud Build.
+This repository contains a full-stack, secure AI platform deployed on Google Cloud via Terraform. It enables private, internal document chat with enterprise-grade security and automated PII protection.
 
 ## Architecture Overview
 
@@ -8,7 +8,7 @@ This repository contains a full-stack, secure AI platform deployed on Google Clo
 *Figure 1: Google Cloud Platform Architecture*
 
 ![AWS Architecture](images/AWS_Architecture.jpg)
-*Figure 2: AWS Architecture*
+*Figure 2: Correspondent AWS Architecture*
 
 The platform is composed of three main layers:
 
@@ -41,7 +41,7 @@ The Backend Agent is designed as a stateful, retrieval-augmented system that bal
 
 ## Security & Resilience: A Multi-Layered Defense
 
-This platform implements a robust, multi-layered security strategy. Following an extensive audit using the `/security:analyze` command, the codebase and infrastructure have been hardened against the following threats:
+This platform implements a robust, multi-layered security strategy. The codebase and infrastructure have been hardened against the following threats:
 
 ### 1. Web & Application Security (OWASP Top 10)
 -   **SQL Injection (SQLi) Protection:**
@@ -81,11 +81,11 @@ This platform has been upgraded for production-scale performance, cost efficienc
 
 ### 2. Latency & Performance Optimization
 - **Asynchronous I/O (Neural Core):** The backend is built on **FastAPI** and uses **`asyncpg`** for non-blocking database connections. This allows a single instance to handle thousands of concurrent requests with minimal resource usage.
-- **Server-Sent Events (SSE):** Real-time token streaming from the LLM (Gemini 1.5 Flash) directly to the Next.js UI provides sub-second "Time-To-First-Token," creating a highly responsive user experience.
+- **Server-Sent Events (SSE):** Real-time token streaming from the LLM (Gemini 3 Flash) directly to the Next.js UI provides sub-second "Time-To-First-Token," creating a highly responsive user experience.
 - **Asynchronous Thread Pooling:** Expensive operations like PII de-identification via Google Cloud DLP are offloaded to asynchronous background threads, preventing them from blocking the main request-response cycle.
 
 ### 3. Cost Control & Efficiency
-- **Gemini 1.5 Flash Integration:** Utilizes the high-efficiency Flash model (`gemini-1.5-flash`) for a 10x reduction in token costs and significantly lower latency compared to larger models.
+- **Gemini 3 Flash Integration:** Utilizes the high-efficiency Flash model (`gemini-3-flash-preview`) for a 10x reduction in token costs and significantly lower latency compared to larger models.
 - **DLP Fast-Path Guardrails:** Implemented a high-performance regex-based "pre-check" for PII. This intelligently bypasses expensive Google Cloud DLP API calls for clean content, invoking the API only when potential PII patterns are detected.
 - **Global CDN Caching:** Google Cloud CDN is enabled at the Load Balancer level to cache static assets and common frontend resources globally, reducing origin server load and improving page load times.
 
@@ -95,10 +95,10 @@ The current infrastructure is designed for high efficiency and is benchmarked to
 
 ### How to Actually Reach 1,000,000 Users per Hour
 
-To handle this load, you must change the architecture. You cannot just "scale up" the Terraform parameters.
+To handle this load, you must change the architecture:
 
 #### Solution A: Offload Vector Search (Recommended)
-Stop asking Postgres to do the math. Use a specialized engine designed for high-throughput vector search.
+Use a specialized engine designed for high-throughput vector search.
 
 *   **Use:** Google Vertex AI Vector Search (formerly Matching Engine).
 *   **Why:** It is fully managed and designed to handle billions of vectors and thousands of QPS with <10ms latency.
@@ -108,12 +108,12 @@ Stop asking Postgres to do the math. Use a specialized engine designed for high-
 
 ## Local Development & Configuration
 
-To run the platform locally for testing, you need to set up environment variables for both components.
+To run the platform locally for testing, set up environment variables for both components.
 
 ### 1. Configuration (Environment Variables)
 
 **Backend (`backend-agent`):**
-The backend no longer uses a `.env` file. You must export these variables in your terminal session or use a tool like `direnv`.
+The backend does not use a `.env` file. You must export the variables in your terminal session.
 
 | Variable | Description |
 | :--- | :--- |
@@ -132,7 +132,7 @@ The backend no longer uses a `.env` file. You must export these variables in you
 | `BACKEND_URL` | The internal URL of the backend (e.g. `http://localhost:8080`). Used by the server-side proxy. |
 | `NEXT_PUBLIC_BACKEND_URL` | Optional: Used only for legacy direct-call testing. |
 
-> **Note on Authentication:** The frontend currently sends a `Bearer MOCK_TOKEN_CHANGE_ME` header. To test locally with the backend, ensure your environment is configured to either ignore this token or use a valid Google ID Token.
+> **Note on Authentication:** The frontend sends a `Bearer MOCK_TOKEN_CHANGE_ME` header. To test locally with the backend, ensure your environment is configured to either ignore this token or use a valid Google ID Token.
 
 ### 2. Running the Backend Locally
 
@@ -145,7 +145,7 @@ export PROJECT_ID="your-project"
 export REGION="us-central1"
 export DB_HOST="your_db_host_ip"
 export DB_PASSWORD="your_db_password"
-
+... etc
 uvicorn main:app --host 0.0.0.0 --port 8080
 ```
 
@@ -159,7 +159,7 @@ npm install autoprefixer --save-dev
 npm run dev
 ```
 
-## Ingestion Pipeline: Feeding the Brain
+## Ingestion Pipeline
 
 The knowledge base is populated using the `ingest.py` script.
 
@@ -216,7 +216,7 @@ The knowledge base is populated using the `ingest.py` script.
 
 ## What To Do: A Deployment Guide for the AI Platform
 
-Here you have the essential `gcloud` commands and manual steps required to successfully deploy your AI platform in a **brand-new Google Cloud project**.
+Essential `gcloud` commands and manual steps required to successfully deploy the AI platform.
 
 The steps are divided into two phases:
 1.  **Pre-Terraform Setup:** Manual steps you must complete *before* running `terraform apply`.
@@ -242,11 +242,10 @@ gcloud config set project [YOUR_PROJECT_ID]
 # Link your project to a billing account (required to use most services)
 gcloud beta billing projects link [YOUR_PROJECT_ID] --billing-account [YOUR_BILLING_ACCOUNT_ID]
 ```
-**Reasoning:** A new project isn't linked to billing by default. Without this, most API and service-related commands will fail.
 
 ### 1.2. Enable Required Google Cloud APIs
 
-Terraform will fail if the APIs for the resources it needs to create are not enabled.
+Terraform will require enablement of these resources.
 
 ```bash
 # Enable all necessary APIs for the platform
@@ -265,11 +264,10 @@ gcloud services enable \
   iap.googleapis.com \
   dlp.googleapis.com
 ```
-**Reasoning:** In a new project, these APIs are disabled. Attempting to create resources like Cloud Run services, VPCs, or Cloud SQL instances without enabling their respective APIs is the most common cause of initial Terraform failures.
 
 ### 1.3. Grant Permissions to the Cloud Build Service Account
 
-Your `cloudbuild-*.yaml` files build and deploy your applications. The default Cloud Build service account needs permission to do so.
+The `cloudbuild-*.yaml` files build and deploy the applications. The default Cloud Build service account needs permission to do so.
 
 ```bash
 # Get your project number
@@ -289,7 +287,6 @@ gcloud projects add-iam-policy-binding $(gcloud config get-value project) \
   --member="serviceAccount:${PROJECT_NUMBER}@cloudbuild.gserviceaccount.com" \
   --role="roles/artifactregistry.writer"
 ```
-**Reasoning:** By default, the Cloud Build agent can build images but cannot deploy them to Cloud Run (`roles/run.admin`) or grant IAM permissions, which might be needed during deployment (`roles/iam.serviceAccountAdmin`). It also needs explicit permission to push the container images it builds to Artifact Registry (`roles/artifactregistry.writer`).
 
 ### 1.5. Grant Permissions to the Backend Service Account
 
@@ -301,11 +298,10 @@ gcloud projects add-iam-policy-binding $(gcloud config get-value project) \
   --member="serviceAccount:ai-backend-sa@$(gcloud config get-value project).iam.gserviceaccount.com" \
   --role="roles/dlp.user"
 ```
-**Reasoning:** The backend code in `chains/guardrails.py` initializes the DLP client. Without the `roles/dlp.user` role, the backend will return a 500 error whenever it tries to process a chat message.
 
 ### 1.6. Configure IAP OAuth Consent Screen (Manual UI Step)
 
-Your Terraform configuration for the load balancer uses Identity-Aware Proxy (IAP), which requires an OAuth Client ID and Secret. This is a **manual, one-time setup** in the Google Cloud Console.
+The Terraform configuration for the load balancer uses Identity-Aware Proxy (IAP), which requires an OAuth Client ID and Secret. This is a **manual, one-time setup** in the Google Cloud Console.
 
 1.  **Navigate to the OAuth Consent Screen:**
     *   Go to [APIs & Services -> OAuth consent screen](https://console.cloud.google.com/apis/credentials/consent) in the GCP Console.
@@ -326,17 +322,17 @@ Your Terraform configuration for the load balancer uses Identity-Aware Proxy (IA
     *   A dialog will appear with your **Client ID** and **Client Secret**.
     *   Copy these values and place them into your `terraform.tfvars` file for the `iap_client_id` and `iap_client_secret` variables.
 
-**Reasoning:** IAP secures your frontend by requiring Google authentication. This process associates your application with a valid identity in your Google Cloud organization. Terraform cannot perform these actions, as they require interactive consent. This step must be completed before you can run `terraform apply`.
+**IAP:** secures your frontend by requiring Google authentication. This process associates your application with a valid identity in your Google Cloud organization. Terraform cannot perform these actions, as they require interactive consent. This step must be completed before you can run `terraform apply`.
 
 ---
 
 ## Phase 2: Post-Terraform Actions & Verification
 
-After `terraform apply` completes successfully, perform these final steps to make your application fully functional.
+After `terraform apply` completes successfully, perform these final steps to make the application fully functional.
 
 ### 2.1. Update DNS "A" Record
 
-Your Terraform `ingress` module provisioned a static IP for the load balancer. You must point your domain to it.
+The Terraform `ingress` module provisioned a static IP for the load balancer. You must point your domain to it.
 
 1.  **Get the Load Balancer IP Address:**
     ```bash
@@ -347,11 +343,11 @@ Your Terraform `ingress` module provisioned a static IP for the load balancer. Y
     *   Create or update the **"A" record** for the domain you specified in `terraform.tfvars` (e.g., `ai.your-company.com`).
     *   Point it to the IP address from the Terraform output.
 
-**Reasoning:** The managed SSL certificate and HTTPS routing will not work until your domain correctly resolves to the load balancer's IP address.
+**Note:** The managed SSL certificate and HTTPS routing will not work until your domain correctly resolves to the load balancer's IP address.
 
 ### 2.2. Enable `pgvector` Extension in Cloud SQL
 
-Your Terraform code correctly provisions the Cloud SQL instance with flags optimized for `pgvector`, but it cannot enable the extension itself.
+The Terraform code correctly provisions the Cloud SQL instance with flags optimized for `pgvector`, but it cannot enable the extension itself.
 
 1.  **Connect to the Cloud SQL instance:** Use your preferred PostgreSQL client (like `psql` or a GUI tool) to connect to the database using the IP address and the password stored in Secret Manager.
 2.  **Run the SQL Command:** Execute the following command in your database to enable the vector extension.
@@ -359,17 +355,14 @@ Your Terraform code correctly provisions the Cloud SQL instance with flags optim
     CREATE EXTENSION IF NOT EXISTS vector;
     ```
 
-**Reasoning:** The `pgvector` extension provides the functions and data types necessary for similarity searches. Without it, the RAG backend will fail when trying to query for documents.
-
 ### 2.3. Set the AI Provider API Key
 
-Your backend's Terraform configuration references a secret for your AI provider's API key. You must update the placeholder value with your real key.
+The backend's Terraform configuration references a secret for the AI provider's API key. You must update the placeholder value with your real key.
 
 ```bash
 # Add the first version of the secret with your actual API key
 gcloud secrets versions add ai-provider-api-key --data-file="/path/to/your/api_key.txt"
 ```
-**Reasoning:** Your Terraform code creates the secret `ai-provider-api-key` with a placeholder value. This command updates it with your real, sensitive key without exposing it in your terminal history. The backend Cloud Run service will automatically pick up the new version.
 
 ### 2.4. Trigger Cloud Build to Deploy Your Code
 
@@ -382,9 +375,6 @@ gcloud builds submit --config cloudbuild-backend.yaml .
 # Deploy the Next.js frontend
 gcloud builds submit --config cloudbuild-frontend.yaml .
 ```
-**Reasoning:** This is the final step that replaces the placeholder services with your actual Next.js and FastAPI applications, making the platform live.
-
-By following these steps in order, you can systematically address the most common permission and connectivity gaps, leading to a successful and secure deployment.
-
+**Final step:** Replaces the placeholder services with your actual Next.js and FastAPI applications, making the platform live.
 **Acknowledgements**
 ✨ Google ML Developer Programs and Google Developers Program supported this work by providing Google Cloud Credits (and awesome tutorials for the Google Developer Experts)✨
