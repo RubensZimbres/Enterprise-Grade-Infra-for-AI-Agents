@@ -153,7 +153,7 @@ uvicorn main:app --host 0.0.0.0 --port 8080
 
 ```bash
 cd frontend-nextjs
-npm install 
+npm install
 npm audit fix --force
 npm install autoprefixer --save-dev
 npm run dev
@@ -376,5 +376,6 @@ gcloud builds submit --config cloudbuild-backend.yaml .
 gcloud builds submit --config cloudbuild-frontend.yaml .
 ```
 **Final step:** Replaces the placeholder services with your actual Next.js and FastAPI applications, making the platform live.
+
 **Acknowledgements**
 ✨ Google ML Developer Programs and Google Developers Program supported this work by providing Google Cloud Credits (and awesome tutorials for the Google Developer Experts)✨
