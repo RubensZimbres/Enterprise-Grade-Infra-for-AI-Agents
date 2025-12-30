@@ -265,6 +265,19 @@ The knowledge base is populated via an automated **Event-Driven Pipeline** using
 -   **`ingress`**: Global Load Balancer, Cloud Armor, and SSL.
 -   **`billing_monitoring`**: Budgets, Alert Policies, and Notification Channels.
 
+#### IAM Connectivity Matrix
+The following table details the Zero-Trust permission model enforced by the infrastructure:
+
+| Source | Target | Role | Status |
+| :--- | :--- | :--- | :--- |
+| Frontend SA | Backend Service | `roles/run.invoker` | ✅ Present |
+| Backend SA | Vertex AI | `roles/aiplatform.user` | ✅ Present |
+| Backend SA | Cloud SQL | `roles/cloudsql.client` | ✅ Present |
+| Backend SA | Secret Manager | `roles/secretmanager.secretAccessor` | ✅ Present |
+| Backend SA | Firestore | `roles/datastore.user` | ✅ Present |
+| Backend SA | Cloud DLP | `roles/dlp.user` | ✅ Present |
+| Function SA | Storage | `roles/storage.objectViewer` | ✅ Present |
+
 ## What To Do: A Deployment Guide for the AI Platform
 
 Essential `gcloud` commands and manual steps required to successfully deploy the AI platform.

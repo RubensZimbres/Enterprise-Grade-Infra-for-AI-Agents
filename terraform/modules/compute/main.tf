@@ -51,6 +51,13 @@ resource "google_project_iam_member" "backend_firestore_user" {
   member  = "serviceAccount:${google_service_account.backend_sa.email}"
 }
 
+# Allow Backend to use DLP (PII Masking)
+resource "google_project_iam_member" "backend_dlp_user" {
+  project = var.project_id
+  role    = "roles/dlp.user"
+  member  = "serviceAccount:${google_service_account.backend_sa.email}"
+}
+
 # --- 3. The Backend Service (The Brain) ---
 
 resource "google_cloud_run_v2_service" "backend" {
