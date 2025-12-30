@@ -1,6 +1,6 @@
 # From PoC to Production: Enterprise AI Platform with RAG and Guardrails
 
-This repository contains a full-stack, secure AI platform deployed on Google Cloud via Terraform. It enables secure, RAG-based chat with enterprise-grade security and automated PII protection, now accessible to public users via Firebase Authentication.
+This repository contains a full-stack, secure AI platform deployed on Google Cloud via Terraform. It enables secure, RAG-based chat with enterprise-grade security and automated PII protection, accessible to public users via Firebase Authentication.
 
 ## Architecture Overview
 
@@ -139,38 +139,7 @@ Use a specialized engine designed for high-throughput vector search.
 
 ## Local Development & Configuration
 
-To run the platform locally for testing, set up environment variables for both components.
-
-### 1. Configuration (Environment Variables)
-
-**Backend (`backend-agent`):**
-The backend does not use a `.env` file. You must export the variables in your terminal session.
-
-| Variable | Description |
-| :--- | :--- |
-| `PROJECT_ID` | Your Google Cloud Project ID. |
-| `REGION` | GCP region (e.g., `us-central1`). |
-| `DB_HOST` | IP of your Cloud SQL instance (or `127.0.0.1` if using the Cloud SQL Auth Proxy). |
-| `DB_USER` | Database username (default: `postgres`). |
-| `DB_PASSWORD` | Database password (mapped from Secret Manager in prod). |
-| `DB_NAME` | Name of the database (default: `postgres`). |
-| `REDIS_HOST` | Host for Redis semantic caching (default: `localhost`). |
-| `GOOGLE_API_KEY` | Your Google/Vertex AI API key (if not using ADC). |
-
-**Frontend (`frontend-nextjs/.env.local`):**
-| Variable | Description |
-| :--- | :--- |
-| `BACKEND_URL` | The internal URL of the backend (e.g. `http://localhost:8080`). Used by the server-side proxy. |
-| `NEXT_PUBLIC_FIREBASE_API_KEY` | Firebase API Key. |
-| `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | Firebase Auth Domain. |
-| `NEXT_PUBLIC_FIREBASE_PROJECT_ID` | Firebase Project ID. |
-| `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` | Firebase Storage Bucket. |
-| `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | Firebase Messaging Sender ID. |
-| `NEXT_PUBLIC_FIREBASE_APP_ID` | Firebase App ID. |
-
-> **Note on Authentication:** The frontend now uses Firebase. For local backend testing, you can use the `Bearer MOCK_TOKEN` header if `DEBUG=true` is set on the backend.
-
-### 2. Running the Backend Locally
+### 1. Running the Backend Locally
 
 ```bash
 python3 -m venv myenv
@@ -185,7 +154,7 @@ export DB_PASSWORD="your_db_password"
 uvicorn main:app --host 0.0.0.0 --port 8080
 ```
 
-### 3. Running the Frontend Locally
+### 2. Running the Frontend Locally
 
 ```bash
 cd frontend-nextjs
@@ -434,6 +403,54 @@ gcloud builds submit --config cloudbuild-backend.yaml .
 gcloud builds submit --config cloudbuild-frontend.yaml .
 ```
 **Final step:** Replaces the placeholder services with your actual Next.js and FastAPI applications, making the platform live.
+
+## Payment & Subscription System (New)
+
+The platform now enforces a strict **"Login -> Pay -> Chat"** workflow using Stripe and Cloud SQL.
+
+### 1. Payment Architecture
+*   **Source of Truth:** The Cloud SQL (PostgreSQL) database is the single source of truth for user subscription status.
+*   **Stripe Integration:**
+    *   **Webhooks:** A secure `/webhook` endpoint listens for `checkout.session.completed` and `invoice.payment_succeeded` events from Stripe.
+    *   **Automatic Activation:** When a payment succeeds, the webhook updates the user's `is_active` status in the `users` table.
+*   **Security Enforcement:**
+    *   **Backend Middleware:** The `get_current_user` dependency checks the database for every request. If `is_active` is false, it raises a `403 Forbidden` error.
+    *   **Frontend Redirect:** The frontend intercepts these 403 errors and automatically redirects the user to the `/payment` page.
+
+### 2. Database Schema
+The new `users` table tracks subscription state:
+*   `email` (Primary Key): Linked to Firebase Identity.
+*   `is_active` (Boolean): Grants access to the chat.
+*   `stripe_customer_id`: Links to the Stripe Customer.
+*   `subscription_status`: Status string (e.g., 'active', 'past_due').
+
+## Secrets Management (Required)
+
+To deploy this platform securely, you must configure the following secrets in **Google Secret Manager**.
+
+| Secret Name | Description | Required By |
+| :--- | :--- | :--- |
+| `PROJECT_ID` | Your Google Cloud Project ID. | Backend |
+| `REGION` | GCP region (e.g., `us-central1`). | Backend, Ingest |
+| `DB_HOST` | IP of your Cloud SQL instance (or `127.0.0.1` if using the Cloud SQL Auth Proxy). | Backend, Ingest |
+| `DB_USER` | Database username (default: `postgres`). | Backend, Ingest |
+| `DB_PASSWORD` | Password for the Cloud SQL (Postgres) 'postgres' user. | Backend, Terraform |
+| `DB_NAME` | Name of the database (default: `postgres`). | Backend, Ingest |
+| `DATABASE_URL` | Full SQLAlchemy connection string (e.g., `postgresql://user:pass@10.x.x.x/postgres`). | Backend |
+| `REDIS_HOST` | Hostname/IP of the Redis instance. | Backend |
+| `GOOGLE_API_KEY` | (Optional) API Key for Gemini/Vertex AI if not using ADC. | Backend |
+| `STRIPE_API_KEY` | Stripe Secret Key (`sk_live_...`). | Backend |
+| `STRIPE_WEBHOOK_SECRET` | Stripe Webhook Signing Secret (`whsec_...`). | Backend |
+| `BACKEND_URL` | The internal URL of the backend (e.g. `http://localhost:8080`). Used by the server-side proxy. | Frontend |
+| `NEXT_PUBLIC_FIREBASE_API_KEY` | Firebase API Key. | Frontend |
+| `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | Firebase Auth Domain. | Frontend |
+| `NEXT_PUBLIC_FIREBASE_PROJECT_ID` | Firebase Project ID. | Frontend |
+| `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` | Firebase Storage Bucket. | Frontend |
+| `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | Firebase Messaging Sender ID. | Frontend |
+| `NEXT_PUBLIC_FIREBASE_APP_ID` | Firebase App ID. | Frontend |
+
+> **Note on Authentication:** The frontend uses Firebase. For local backend testing, you can use the `Bearer MOCK_TOKEN` header if `DEBUG=true` is set on the backend.
+> **Note:** Frontend configuration variables (e.g., `NEXT_PUBLIC_FIREBASE_API_KEY`, `BACKEND_URL`) are not strictly "secrets" but should be managed via Cloud Run Environment Variables or build args.
 
 **Acknowledgements**
 ✨ Google ML Developer Programs and Google Developers Program supported this work by providing Google Cloud Credits (and awesome tutorials for the Google Developer Experts)✨

@@ -2,7 +2,10 @@ from fastapi import Header, HTTPException, Depends, Request
 import firebase_admin
 from firebase_admin import auth, credentials
 import logging
-import os
+from sqlalchemy.orm import Session
+from database import get_db
+import crud
+from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -13,13 +16,13 @@ try:
 except ValueError:
     firebase_admin.initialize_app()
 
-def get_current_user(request: Request, x_firebase_token: str = Header(None, alias="X-Firebase-Token")):
+def get_current_user(request: Request, x_firebase_token: str = Header(None, alias="X-Firebase-Token"), db: Session = Depends(get_db)):
     """
-    Validates the Firebase User Identity passed from the Frontend.
+    Validates the Firebase User Identity passed from the Frontend AND checks DB subscription status.
     """
     # 0. LOCAL DEVELOPMENT FALLBACK
     # If we are in local development and have a mock token, bypass Firebase Auth
-    if os.getenv("DEBUG", "false").lower() == "true":
+    if settings.DEBUG.lower() == "true":
         auth_header = request.headers.get("Authorization")
         if auth_header == "Bearer MOCK_TOKEN":
             return "local-dev@example.com"
@@ -39,6 +42,12 @@ def get_current_user(request: Request, x_firebase_token: str = Header(None, alia
              # For this app, we strictly require an email for the session scope.
              raise HTTPException(status_code=401, detail="Unauthorized: Token missing email")
              
+        # 2. Check Database for Active Subscription
+        db_user = crud.get_user(db, user_email)
+        if not db_user or not db_user.is_active:
+            logger.warning(f"User {user_email} attempted access without active subscription.")
+            raise HTTPException(status_code=403, detail="Payment Required: Active subscription needed.")
+
         return user_email
 
     except auth.RevokedIdTokenError:
@@ -47,6 +56,8 @@ def get_current_user(request: Request, x_firebase_token: str = Header(None, alia
     except auth.ExpiredIdTokenError:
         logger.warning("Firebase token expired")
         raise HTTPException(status_code=401, detail="Unauthorized: Token Expired")
+    except HTTPException as he:
+        raise he
     except Exception as e:
         logger.error(f"Firebase token validation error: {e}")
         raise HTTPException(status_code=401, detail="Unauthorized: Invalid Token")

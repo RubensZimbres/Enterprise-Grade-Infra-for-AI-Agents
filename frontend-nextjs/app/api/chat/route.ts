@@ -71,6 +71,9 @@ export async function POST(req: NextRequest) {
         );
     }
 
+    // Payment validation is now handled by the backend-agent
+    // using the X-Firebase-Token and Cloud SQL check.
+
     const firebaseToken = userAuthToken.replace('Bearer ', '');
 
     console.log(`Forwarding request to: ${backendUrl}/stream`);
