@@ -78,6 +78,29 @@ resource "google_cloud_run_v2_service" "backend" {
     containers {
       image = "us-docker.pkg.dev/cloudrun/container/hello" 
 
+      # ADDED: Auto-healing configuration
+      startup_probe {
+        initial_delay_seconds = 10
+        timeout_seconds       = 3
+        period_seconds        = 10
+        failure_threshold     = 3
+        http_get {
+          path = "/health"
+          port = 8080
+        }
+      }
+
+      liveness_probe {
+        initial_delay_seconds = 30 # Give startup probe time to finish
+        timeout_seconds       = 3
+        period_seconds        = 15
+        failure_threshold     = 3
+        http_get {
+          path = "/health"
+          port = 8080
+        }
+      }
+
       resources {
         limits = {
           cpu    = "4"

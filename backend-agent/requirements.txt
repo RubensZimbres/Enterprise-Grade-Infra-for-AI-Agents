@@ -21,3 +21,5 @@ opentelemetry-exporter-gcp-trace
 opentelemetry-instrumentation-fastapi
 opentelemetry-instrumentation-requests
 firebase-admin
+tenacity
+opentelemetry-instrumentation-langchain

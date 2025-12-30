@@ -19,7 +19,7 @@ The platform is composed of three main layers:
 ## Architecture Decisions & Rationale
 
 ### 1. Authentication: Firebase Authentication
-I chose **Firebase Authentication** to provide a flexible "Public Door" for the application while maintaining security.
+I chose **Firebase Authentication** to provide a flexible "Public Door" for the application while maintaining security. For Corporate Wall via IAP, refer to merge #4.
 *   **Broad Access:** Allows users to sign in with Google, Microsoft (Hotmail/Outlook), Email/Password, and other providers, making the platform accessible to external users, not just internal employees.
 *   **Application-Level Security:** Authentication is handled by the application logic (Frontend & Backend) using the Firebase SDK, replacing the previous infrastructure-level IAP barrier.
 *   **Session Management:** Firebase handles secure session management and token refreshing on the client side.
@@ -89,6 +89,17 @@ This platform implements a robust, multi-layered security strategy. The codebase
     -   **Service-to-Service OIDC:** The frontend generates short-lived OIDC ID tokens using the `google-auth-library` to authenticate itself to the backend infrastructure.
     -   **User Identity:** The frontend passes the Firebase ID token for application-level user verification.
 -   **Secure Defaults:** `.gitignore` and `.dockerignore` are optimized to prevent the accidental leakage of `*.tfvars`, `.env`, or local credentials.
+
+### 5. Operational Resilience & Observability
+-   **Circuit Breaker (Frontend):** The Next.js frontend implements the **Circuit Breaker** pattern (via `opossum`) for all backend communications.
+    *   **Behavior:** If the backend fails **50% of requests** (e.g., due to a database outage), the circuit will "OPEN" and immediately return a "Service Unavailable" error to the client without waiting for timeouts.
+    *   **Recovery:** After **10 seconds**, it will "half-open" to test if the backend is back online.
+-   **Transient Error Recovery (Backend):** The Neural Core uses **exponential backoff retries** (via `tenacity`) for external dependencies (Vertex AI, SQL, Redis).
+    *   **Policy:** Automatically retries up to **3 times** with exponential backoff if it encounters transient errors like `GoogleAPICallError`, `ServiceUnavailable`, or network timeouts.
+-   **Auto-Healing (Infrastructure):** The Backend Agent is configured with **Liveness and Startup Probes** in Cloud Run.
+    *   **Startup Probe:** Prevents traffic from reaching a container until it is fully initialized (DB connected, models loaded).
+    *   **Liveness Probe:** Continuously pings the `/health` endpoint. If the backend freezes or becomes unresponsive (e.g., deadlocks), Cloud Run automatically kills and restarts the container, resolving the issue without manual intervention.
+-   **Distributed Tracing:** Full-stack observability is implemented using **OpenTelemetry**. Traces propagate from the Frontend to the Backend and deep into the LangChain execution (Embeddings -> Retrieval -> Generation), visible in **Google Cloud Trace** for precise bottleneck analysis.
 
 ## Enhanced Enterprise Architecture (Optimized)
 
@@ -235,12 +246,14 @@ The knowledge base is populated via an automated **Event-Driven Pipeline** using
 ### Frontend (Next.js Agent)
 -   **Location:** `/frontend-nextjs`
 -   **Tech:** React 18, Tailwind CSS, Lucide Icons, Firebase.
+-   **Resilience:** **Circuit Breaker** (`opossum`) for fail-fast backend communication.
 -   **Security:** Acts as a secure proxy to the Backend; Authentication handled via Firebase.
 -   **Scalability:** Configured with `min_instances = 1` for zero-latency response.
 
 ### Backend (FastAPI Agent)
 -   **Location:** `/backend-agent`
 -   **Neural Core:** Orchestrates RAG using LangChain and Vertex AI.
+-   **Resilience:** **Retries** (`tenacity`) for transient errors & **OpenTelemetry** tracing.
 -   **Vector DB:** Cloud SQL for PostgreSQL 15 with `pgvector` and `asyncpg`.
 -   **Networking:** Set to `INGRESS_TRAFFIC_INTERNAL_ONLY` to ensure it is unreachable from the public internet.
 
@@ -398,7 +411,7 @@ gcloud secrets versions add ai-provider-api-key --data-file="/path/to/your/api_k
 
 ### 2.4. Trigger Cloud Build to Deploy Your Code
 
-Terraform has set up the infrastructure, but it uses a placeholder "hello world" container. You now need to run your Cloud Build pipelines to deploy your actual frontend and backend applications.
+Terraform has set up the infrastructure, but it uses a placeholder "hello world" container. You now need to run your Cloud Build pipelines to deploy your actual frontend and backend applications with the new resiliency features.
 
 ```bash
 # Deploy the backend agent

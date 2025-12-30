@@ -6,8 +6,15 @@ from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_core.runnables import RunnableLambda
 from langchain_core.globals import set_llm_cache
 from langchain_redis import RedisSemanticCache
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
+from google.api_core.exceptions import GoogleAPICallError, ServiceUnavailable
+import httpx
+import logging
+import asyncio
 from config import settings
 from .guardrails import deidentify_content, check_security
+
+logger = logging.getLogger(__name__)
 
 # 1. Setup Embeddings
 embeddings = VertexAIEmbeddings(
@@ -96,9 +103,16 @@ conversational_rag_chain = RunnableWithMessageHistory(
 )
 
 # 7. Add Guardrails (Security + DLP)
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    retry=retry_if_exception_type((GoogleAPICallError, ServiceUnavailable, httpx.RequestError, asyncio.TimeoutError)),
+    before_sleep=before_sleep_log(logger, logging.WARNING)
+)
 async def protected_chain_invoke(input_text: str, session_id: str):
     """
     Asynchronously invokes the RAG chain with Security Judge and DLP guardrails.
+    Retries on transient errors.
     """
     # Step A: Security Check (Expert Judge)
     security_check = await check_security(input_text)

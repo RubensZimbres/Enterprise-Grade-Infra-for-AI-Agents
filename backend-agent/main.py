@@ -10,6 +10,7 @@ from dependencies import get_current_user
 from opentelemetry import trace
 from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.langchain import LangChainInstrumentor
 from opentelemetry.propagate import set_global_textmap
 from opentelemetry.propagators.cloud_trace_propagator import (
     CloudTraceFormatPropagator,
@@ -39,6 +40,7 @@ app = FastAPI(title="Enterprise AI Agent", version="1.0.0")
 
 # Instrument FastAPI
 FastAPIInstrumentor.instrument_app(app)
+LangChainInstrumentor().instrument()
 
 # Add CORS Middleware
 app.add_middleware(

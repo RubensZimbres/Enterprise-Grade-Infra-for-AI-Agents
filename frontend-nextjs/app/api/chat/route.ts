@@ -1,10 +1,43 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleAuth } from 'google-auth-library';
+import CircuitBreaker from 'opossum';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const auth = new GoogleAuth();
+
+// --- Circuit Breaker Configuration ---
+const breakerOptions = {
+  timeout: 15000, // Timeout after 15 seconds (Backend is streaming, but initial connection should be fast)
+  errorThresholdPercentage: 50, // Trip if 50% of requests fail
+  resetTimeout: 10000, // Wait 10 seconds before trying again (Half-Open)
+};
+
+// Function to wrap with Circuit Breaker
+async function fetchBackend(url: string, options: RequestInit) {
+  const response = await fetch(url, options);
+  if (!response.ok) {
+     // Throwing error triggers the failure count in Opossum
+     throw new Error(`Backend Error: ${response.status} ${response.statusText}`);
+  }
+  return response;
+}
+
+// Initialize Breaker (Global scope to persist across warm invocations)
+const breaker = new CircuitBreaker(fetchBackend, breakerOptions);
+
+breaker.fallback(() => {
+  return new Response(
+    JSON.stringify({ error: 'Service Unavailable (Circuit Open). Please try again later.' }),
+    { status: 503, headers: { 'Content-Type': 'application/json' } }
+  );
+});
+
+// Logging for visibility
+breaker.on('open', () => console.warn('🔴 Circuit Breaker OPEN: Backend is failing'));
+breaker.on('halfOpen', () => console.log('🟡 Circuit Breaker HALF-OPEN: Testing backend'));
+breaker.on('close', () => console.log('🟢 Circuit Breaker CLOSED: Backend is healthy'));
 
 export async function POST(req: NextRequest) {
   try {
@@ -37,19 +70,15 @@ export async function POST(req: NextRequest) {
             { status: 401 }
         );
     }
-    // Remove "Bearer " prefix if present to be clean, but usually headers forward it as is. 
-    // We will forward it in X-Firebase-Token, which expects the raw token in our backend logic? 
-    // Backend logic: `decoded_token = auth.verify_id_token(x_firebase_token)`
-    // verify_id_token expects just the token string.
+
     const firebaseToken = userAuthToken.replace('Bearer ', '');
 
     console.log(`Forwarding request to: ${backendUrl}/stream`);
 
-    // Get Service-to-Service OIDC auth headers (Identity of the Frontend Service)
+    // Get Service-to-Service OIDC auth headers
     let serviceAuthHeaders = {};
     if (!backendUrl.includes('localhost')) {
       try {
-        // For Cloud Run, the audience is the URL of the receiving service
         const client = await auth.getIdTokenClient(backendUrl);
         serviceAuthHeaders = await client.getRequestHeaders();
         console.log('Generated Service-to-Service OIDC token');
@@ -58,63 +87,61 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Forward the request to the internal backend
-    const response = await fetch(`${backendUrl}/stream`, {
+    const fetchOptions: RequestInit = {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        
-        // 1. Service Identity (Who is calling? The Frontend Service)
-        // Uses standard Authorization: Bearer <OIDC_TOKEN>
         ...serviceAuthHeaders,
-
-        // 2. User Identity (Who is the user? The Firebase User)
-        // Passed in a custom header to avoid conflict with Service Identity
         'X-Firebase-Token': firebaseToken,
       },
       body: JSON.stringify(body),
-    });
+    };
 
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => 'Unknown error');
-      console.error(`Backend error: ${response.status} - ${errorText}`);
-      if (response.status === 401) {
-           return NextResponse.json({ error: 'Unauthorized Backend Access' }, { status: 401 });
-      }
-      return NextResponse.json(
-        { error: `Backend error: ${errorText}` },
-        { status: response.status }
-      );
+    // --- Execute with Circuit Breaker ---
+    try {
+        const response = await breaker.fire(`${backendUrl}/stream`, fetchOptions);
+        
+        // If fallback triggered (Response object from fallback), return it
+        if (response.status === 503 && !response.body) { 
+             // Opossum fallback might return a Response-like object depending on implementation
+             // But here our fallback returns a standard Response
+             return response;
+        }
+
+        if (!response.body) {
+            return NextResponse.json(
+                { error: 'Empty response from backend' },
+                { status: 502 }
+            );
+        }
+
+        // Proxy the stream back to the client
+        return new Response(response.body, {
+            status: 200,
+            headers: {
+                'Content-Type': 'text/event-stream',
+                'Cache-Control': 'no-cache, no-transform',
+                'Connection': 'keep-alive',
+                'X-Accel-Buffering': 'no',
+            },
+        });
+
+    } catch (err: any) {
+        console.error('Circuit Breaker Error:', err);
+        if (err.code === 'EOPEN') {
+             return NextResponse.json(
+                { error: 'Service Unavailable (Circuit Breaker Open)' },
+                { status: 503 }
+            );
+        }
+        return NextResponse.json(
+            { error: `Backend Request Failed: ${err.message}` },
+            { status: 500 }
+        );
     }
-
-    if (!response.body) {
-      return NextResponse.json(
-        { error: 'Empty response from backend' },
-        { status: 502 }
-      );
-    }
-
-    // Proxy the stream back to the client
-    return new Response(response.body, {
-      status: 200,
-      headers: {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache, no-transform',
-        'Connection': 'keep-alive',
-        'X-Accel-Buffering': 'no', // Disable nginx buffering
-      },
-    });
 
   } catch (error) {
     console.error('Proxy error:', error);
-
-    if (error instanceof TypeError && error.message.includes('fetch')) {
-      return NextResponse.json(
-        { error: 'Unable to connect to backend service' },
-        { status: 503 }
-      );
-    }
-
     return NextResponse.json(
       { error: 'Internal Server Error' },
       { status: 500 }
