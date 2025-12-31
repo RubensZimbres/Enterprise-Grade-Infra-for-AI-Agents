@@ -112,3 +112,13 @@ resource "google_secret_manager_secret_iam_member" "frontend_stripe_secret_key_a
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${module.compute.frontend_sa_email}"
 }
+
+module "cicd" {
+  source = "./modules/cicd"
+
+  project_id       = var.project_id
+  region           = var.region
+  github_owner     = var.github_owner
+  github_repo_name = var.github_repo_name
+}
+

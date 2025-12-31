@@ -168,6 +168,9 @@ The following table details the Zero-Trust permission model enforced by the infr
 | Backend SA | Firestore | `roles/datastore.user` | ✅ Present |
 | Backend SA | Cloud DLP | `roles/dlp.user` | ✅ Present |
 | Function SA | Storage | `roles/storage.objectViewer` | ✅ Present |
+| Cloud Build SA | CI/CD | `roles/run.admin` | ✅ Present |
+| Cloud Build SA | CI/CD | `roles/iam.serviceAccountAdmin` | ✅ Present |
+| Cloud Build SA | CI/CD | `roles/artifactregistry.writer` | ✅ Present |
 
 ---
 
@@ -343,6 +346,22 @@ stripe listen --forward-to localhost:8080/webhook
 Copy the webhook signing secret output by this command into your backend `.env` file (`STRIPE_WEBHOOK_SECRET`).
 
 ---
+
+## CI/CD Implementation
+This section covers the automated CI/CD pipeline using Cloud Build triggers connected to GitHub.
+
+### Overview
+The CI/CD infrastructure automates the build and deployment process whenever changes are pushed to the repository. It consists of:
+
+**Artifact Registry:** A Docker repository (cloud-run-source-deploy) for storing container images.
+**Cloud Build Triggers:** Automated triggers that watch specific paths in the repository and execute the corresponding build configurations.
+
+### Steps
+**1. Connect Repository:** Ensure you have installed the "Cloud Build" GitHub App on your repository and connected it to your Google Cloud project.
+**2. Update `terraform.tfvars`:** You will need to add values for the new variables in your terraform.tfvars file (or pass them via command line):
+
+     github_owner     = "your-username"
+     github_repo_name = "your-repo-name"
 
 ## What To Do: A Deployment Guide for the AI Platform
 
