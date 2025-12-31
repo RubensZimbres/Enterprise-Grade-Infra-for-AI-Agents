@@ -67,6 +67,12 @@ The Backend Agent is designed as a stateful, retrieval-augmented system that bal
     *   **Separators:** Prioritizes splitting by double newlines (paragraphs), then single newlines, then spaces.
 *   **Document Support:** Includes a `DirectoryLoader` with `PyPDFLoader` to automatically parse and index complex PDF structures.
 
+### 4. Cache Implementation
+
+*   **Cost Savings:** You pay for the system instruction tokens once per hour (cache creation) instead of every single request.
+*   **Latency:** The model doesn't need to re-process the large system prompt for every user query, leading to faster Time to First Token (TTFT).
+*   **Implicit vs. Explicit:** We relied on Implicit Caching for the short-term chat history (managed automatically by Gemini) and implemented Explicit Caching for the static, heavy system prompt.
+
 ## Security & Resilience: A Multi-Layered Defense
 This platform implements a robust, multi-layered security strategy. The codebase and infrastructure have been hardened against the following threats:
 
