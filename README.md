@@ -211,18 +211,16 @@ Instead of connecting to remote Cloud SQL instances (which is slow and insecure 
 
     Connect to your local database (using DBeaver, pgAdmin, or command line):
     ```bash
-    # Connect to the local docker container
+    # Get container ID and connect to the local docker container
+    docker ps
     docker exec -it <container_id_of_postgres> psql -U postgres
     ```
-    *(Find the container ID via `docker ps`)*
 
     Run the following SQL commands inside the psql prompt:
     ```sql
-    -- 1. Enable pgvector extension
     CREATE EXTENSION IF NOT EXISTS vector;
     CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
-    -- 2. Create Users Table (Matches models.py)
     CREATE TABLE IF NOT EXISTS users (
         email VARCHAR PRIMARY KEY,
         is_active BOOLEAN DEFAULT FALSE,
@@ -231,8 +229,6 @@ Instead of connecting to remote Cloud SQL instances (which is slow and insecure 
         created_at TIMESTAMPTZ DEFAULT NOW(),
         updated_at TIMESTAMPTZ
     );
-
-    -- 3. (Optional) Insert a dummy active user for testing
     INSERT INTO users (email, is_active, subscription_status)
     VALUES ('test@example.com', true, 'active');
     ```

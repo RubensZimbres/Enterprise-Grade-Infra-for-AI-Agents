@@ -284,8 +284,5 @@ resource "google_cloud_run_v2_job" "ingest_job" {
 
 # --- 8. Security: Allow Frontend to Access Secrets ---
 
-resource "google_project_iam_member" "frontend_secret_accessor" {
-  project = var.project_id
-  role    = "roles/secretmanager.secretAccessor"
-  member  = "serviceAccount:${google_service_account.frontend_sa.email}"
-}
+# REMOVED: Excessive permission (roles/secretmanager.secretAccessor on Project)
+# The frontend now has scoped access to specific secrets (Stripe) defined in the root main.tf

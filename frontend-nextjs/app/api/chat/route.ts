@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
 
     // Use server-side only env var (not NEXT_PUBLIC_)
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:8080';
+    const backendUrl = process.env.BACKEND_URL;
 
     if (!backendUrl) {
       console.error('BACKEND_URL environment variable is not configured');

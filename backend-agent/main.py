@@ -109,7 +109,8 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None),
         
         if customer_email:
             crud.update_user_subscription(db, customer_email, 'active', customer_id)
-            logger.info(f"Activated subscription for {customer_email}")
+            # Log customer_id instead of email for privacy
+            logger.info(f"Activated subscription for customer_id: {customer_id}")
 
     elif event['type'] == 'invoice.payment_succeeded':
         invoice = event['data']['object']

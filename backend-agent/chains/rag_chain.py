@@ -11,6 +11,7 @@ from google.api_core.exceptions import GoogleAPICallError, ServiceUnavailable
 import httpx
 import logging
 import asyncio
+from urllib.parse import quote_plus
 from config import settings
 from .guardrails import deidentify_content, check_security
 
@@ -25,7 +26,7 @@ embeddings = VertexAIEmbeddings(
 
 # 2. Setup AlloyDB Vector Store
 # Connection string for asyncpg
-connection_string = f"postgresql+asyncpg://{settings.DB_USER}:{settings.DB_PASSWORD}@{settings.DB_HOST}:5432/{settings.DB_NAME}"
+connection_string = f"postgresql+asyncpg://{quote_plus(settings.DB_USER)}:{quote_plus(settings.DB_PASSWORD)}@{settings.DB_HOST}:5432/{settings.DB_NAME}"
 
 vector_store = PGVector(
     embeddings=embeddings,

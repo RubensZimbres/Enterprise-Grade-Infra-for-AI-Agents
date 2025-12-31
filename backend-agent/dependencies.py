@@ -23,9 +23,8 @@ def get_current_user(request: Request, x_firebase_token: str = Header(None, alia
     # 0. LOCAL DEVELOPMENT FALLBACK
     # If we are in local development and have a mock token, bypass Firebase Auth
     if settings.DEBUG.lower() == "true":
-        auth_header = request.headers.get("Authorization")
-        if auth_header == "Bearer MOCK_TOKEN":
-            return "local-dev@example.com"
+        # Removed insecure backdoor
+        pass
 
     # 1. Verify Firebase Token
     if not x_firebase_token:

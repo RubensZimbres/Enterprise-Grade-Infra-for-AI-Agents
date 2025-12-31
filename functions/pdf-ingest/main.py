@@ -7,6 +7,7 @@ from langchain_postgres import PGVector
 from google.cloud import storage
 from google.cloud import secretmanager
 import asyncio
+from urllib.parse import quote_plus
 
 # Helper
 def get_secret(project_id: str, secret_id: str, version_id: str = "1") -> str:
@@ -67,7 +68,7 @@ async def process_document(local_path):
 
     # 3. Vector Store
     # Connection string
-    connection_string = f"postgresql+asyncpg://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:5432/{DB_NAME}"
+    connection_string = f"postgresql+asyncpg://{quote_plus(DB_USER)}:{quote_plus(DB_PASSWORD)}@{DB_HOST}:5432/{DB_NAME}"
     
     vector_store = PGVector(
         embeddings=get_embeddings(),

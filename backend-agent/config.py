@@ -1,4 +1,5 @@
 import os
+from urllib.parse import quote_plus
 from google.cloud import secretmanager
 from pydantic_settings import BaseSettings
 
@@ -68,7 +69,7 @@ class Settings(BaseSettings):
         else:
             # Fallback: construct it
             if self.DB_HOST and self.DB_PASSWORD:
-                 self.DATABASE_URL = f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:5432/{self.DB_NAME}"
+                 self.DATABASE_URL = f"postgresql://{quote_plus(self.DB_USER)}:{quote_plus(self.DB_PASSWORD)}@{self.DB_HOST}:5432/{self.DB_NAME}"
             else:
                  self.DATABASE_URL = "postgresql://user:password@localhost/dbname" 
 
