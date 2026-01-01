@@ -24,19 +24,20 @@ class Settings(BaseSettings):
     DB_USER: str = "postgres"
     DB_PASSWORD: str = ""
     DB_NAME: str = "postgres"
-    
+
     REDIS_HOST: str = "localhost"
-    
+    REDIS_PASSWORD: str = ""
+
     STRIPE_API_KEY: str = ""
     STRIPE_WEBHOOK_SECRET: str = ""
-    
+
     # Computed
     DATABASE_URL: str = ""
 
     # App Config
     FIRESTORE_COLLECTION: str = "chat_history"
     DEBUG: str = "false"
-    
+
     # CORS Configuration
     FRONTEND_URL: str = "http://localhost:3000"
 
@@ -49,12 +50,12 @@ class Settings(BaseSettings):
         try:
             region_secret = get_secret(self.PROJECT_ID, "REGION")
             if region_secret: self.REGION = region_secret
-            
+
             # Allow overriding FRONTEND_URL via Secret
             frontend_url_secret = get_secret(self.PROJECT_ID, "FRONTEND_URL")
             if frontend_url_secret: self.FRONTEND_URL = frontend_url_secret
         except:
-            # Non-critical secrets can be skipped if you prefer, 
+            # Non-critical secrets can be skipped if you prefer,
             # but generally we want to fail if infrastructure implies they exist.
             pass
 
@@ -70,11 +71,14 @@ class Settings(BaseSettings):
         redis_host_secret = get_secret(self.PROJECT_ID, "REDIS_HOST")
         if redis_host_secret: self.REDIS_HOST = redis_host_secret
 
+        redis_password_secret = get_secret(self.PROJECT_ID, "REDIS_PASSWORD")
+        if redis_password_secret: self.REDIS_PASSWORD = redis_password_secret
+
         # Fetch Secrets
         self.DB_PASSWORD = get_secret(self.PROJECT_ID, "DB_PASSWORD")
         self.STRIPE_API_KEY = get_secret(self.PROJECT_ID, "STRIPE_API_KEY")
         self.STRIPE_WEBHOOK_SECRET = get_secret(self.PROJECT_ID, "STRIPE_WEBHOOK_SECRET")
-        
+
         # Try to fetch DATABASE_URL from secrets first
         db_url_secret = get_secret(self.PROJECT_ID, "DATABASE_URL")
         if db_url_secret:
@@ -84,7 +88,7 @@ class Settings(BaseSettings):
             if self.DB_HOST and self.DB_PASSWORD:
                  self.DATABASE_URL = f"postgresql://{quote_plus(self.DB_USER)}:{quote_plus(self.DB_PASSWORD)}@{self.DB_HOST}:5432/{self.DB_NAME}"
             else:
-                 self.DATABASE_URL = "postgresql://user:password@localhost/dbname" 
+                 self.DATABASE_URL = "postgresql://user:password@localhost/dbname"
 
     class Config:
         # No env_file for production as secrets are injected as env vars

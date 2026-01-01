@@ -51,7 +51,7 @@ async def ingest_data():
     print("🔌 Connecting to Cloud SQL...")
     embeddings = VertexAIEmbeddings(model_name="textembedding-gecko@003", project=settings.PROJECT_ID, location=settings.REGION)
 
-    connection_string = f"postgresql+asyncpg://{settings.DB_USER}:{settings.DB_PASSWORD}@{settings.DB_HOST}:5432/{settings.DB_NAME}"
+    connection_string = f"postgresql+asyncpg://{quote_plus(settings.DB_USER)}:{quote_plus(settings.DB_PASSWORD)}@{settings.DB_HOST}:5432/{settings.DB_NAME}"
 
     # Ensure pgvector extension exists
     # We need a synchronous connection or a specific async execution to run the CREATE EXTENSION command

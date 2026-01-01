@@ -37,8 +37,10 @@ vector_store = PGVector(
 )
 
 # 3. Setup Semantic Cache
+redis_url = f"redis://:{settings.REDIS_PASSWORD}@{settings.REDIS_HOST}:6379" if settings.REDIS_PASSWORD else f"redis://{settings.REDIS_HOST}:6379"
+
 set_llm_cache(RedisSemanticCache(
-    redis_url=f"redis://{settings.REDIS_HOST}:6379",
+    redis_url=redis_url,
     embedding=embeddings,
     score_threshold=0.05
 ))
