@@ -10,8 +10,9 @@ def get_secret(project_id: str, secret_id: str, version_id: str = "1") -> str:
         response = client.access_secret_version(request={"name": name})
         return response.payload.data.decode('UTF-8')
     except Exception as e:
-        print(f"Warning: Could not fetch secret {secret_id}: {e}")
-        return ""
+        # FAIL FAST: If a required secret is missing, the app should not start.
+        print(f"CRITICAL: Could not fetch secret {secret_id}: {e}")
+        raise e
 
 class Settings(BaseSettings):
     # Bootstrapping Variable (Must remain in Env)
@@ -35,6 +36,9 @@ class Settings(BaseSettings):
     # App Config
     FIRESTORE_COLLECTION: str = "chat_history"
     DEBUG: str = "false"
+    
+    # CORS Configuration
+    FRONTEND_URL: str = "http://localhost:3000"
 
     def load_secrets(self):
         if not self.PROJECT_ID:
@@ -42,8 +46,17 @@ class Settings(BaseSettings):
             return
 
         # Fetch Configuration
-        region_secret = get_secret(self.PROJECT_ID, "REGION")
-        if region_secret: self.REGION = region_secret
+        try:
+            region_secret = get_secret(self.PROJECT_ID, "REGION")
+            if region_secret: self.REGION = region_secret
+            
+            # Allow overriding FRONTEND_URL via Secret
+            frontend_url_secret = get_secret(self.PROJECT_ID, "FRONTEND_URL")
+            if frontend_url_secret: self.FRONTEND_URL = frontend_url_secret
+        except:
+            # Non-critical secrets can be skipped if you prefer, 
+            # but generally we want to fail if infrastructure implies they exist.
+            pass
 
         db_host_secret = get_secret(self.PROJECT_ID, "DB_HOST")
         if db_host_secret: self.DB_HOST = db_host_secret

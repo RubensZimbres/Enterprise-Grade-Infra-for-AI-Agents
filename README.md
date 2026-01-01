@@ -111,9 +111,10 @@ This platform has been upgraded for production-scale performance, cost efficienc
 *   **Asynchronous Thread Pooling:** Expensive operations like PII de-identification via Google Cloud DLP are offloaded to asynchronous background threads, preventing them from blocking the main request-response cycle.
 
 ### 3. Cost Control & Efficiency
-*   **Gemini 3 Flash Integration:** Utilizes the high-efficiency Flash model (`gemini-3-flash-preview`) for a 10x reduction in token costs and significantly lower latency compared to larger models.
-*   **DLP Fast-Path Guardrails:** Implemented a high-performance regex-based "pre-check" for PII. This intelligently bypasses expensive Google Cloud DLP API calls for clean content, invoking the API only when potential PII patterns are detected.
-*   **Global CDN Caching:** Google Cloud CDN is enabled at the Load Balancer level to cache static assets and common frontend resources globally, reducing origin server load and improving page load times.
+-   **Gemini 3 Flash Integration:** Utilizes the high-efficiency Flash model (`gemini-3-flash-preview`) for a 10x reduction in token costs and significantly lower latency compared to larger models.
+-   **DLP Fast-Path Guardrails:** Implemented a high-performance regex-based "pre-check" for PII. This intelligently bypasses expensive Google Cloud DLP API calls for clean content, invoking the API only when potential PII patterns are detected.
+-   **Global CDN Caching:** Google Cloud CDN is enabled at the Load Balancer level to cache static assets and common frontend resources globally, reducing origin server load and improving page load times.
+-   **Smart Storage Versioning:** Implemented Object Lifecycle Management on Cloud Storage buckets. Files are automatically transitioned to **Nearline** storage after 7 days, **Archive** storage after 30 days, and **deleted** after 90 days. This ensures disaster recovery capabilities (versioning is enabled) without indefinite storage costs.
 
 ## Performance & Scaling Roadmap
 The current infrastructure is designed for high efficiency and is benchmarked to handle approximately 2,500 users per hour with the standard provisioned resources.
@@ -137,12 +138,6 @@ Use a specialized engine designed for high-throughput vector search.
 
 ![AWS Architecture](images/AWS_Architecture.jpg)
 *Figure 2: Correspondent AWS Architecture*
-
-The platform is composed of three main layers:
-
-1.  **Frontend (UI):** A modern, high-concurrency **Next.js** application providing a real-time streaming chat interface. Accessible publicly via Global Load Balancer, secured by Firebase Authentication.
-2.  **Backend Agent (Neural Core):** An asynchronous **FastAPI** service orchestrating the RAG pipeline, secured by internal-only networking and Firebase Token verification.
-3.  **Infrastructure (Terraform):** Fully automated deployment using "Infrastructure as Code."
 
 ---
 
@@ -182,30 +177,7 @@ This section guides you through running the entire stack (Database, Backend, Fro
 
 Instead of connecting to remote Cloud SQL instances (which is slow and insecure for local dev), we will use Docker to spin up a local **PostgreSQL with pgvector** and **Redis**.
 
-1.  Create a file named `docker-compose.yaml` in the root directory:
-
-    ```yaml
-    version: '3.8'
-    services:
-      postgres:
-        image: ankane/pgvector:v0.5.1 # Postgres 15 with pgvector pre-installed
-        ports:
-          - "5432:5432"
-        environment:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: password
-          POSTGRES_DB: postgres
-        volumes:
-          - postgres_data:/var/lib/postgresql/data
-
-      redis:
-        image: redis:alpine
-        ports:
-          - "6379:6379"
-
-    volumes:
-      postgres_data:
-    ```
+1.  Get the file named `docker-compose.yaml` in the root directory:
 
 2.  **Start the Services:**
     Open your terminal in the project root and run:
@@ -446,27 +418,6 @@ gcloud projects add-iam-policy-binding $(gcloud config get-value project) \
   --member="serviceAccount:ai-backend-sa@$(gcloud config get-value project).iam.gserviceaccount.com" \
   --role="roles/dlp.user"
 ```
-
-### 1.6. Configure Firebase Project (Manual UI Step)
-
-Authentication is now handled by Firebase. This is a **manual, one-time setup**.
-
-1.  **Go to Firebase Console:**
-    *   Navigate to [console.firebase.google.com](https://console.firebase.google.com).
-    *   Add a new project or select your existing Google Cloud project.
-2.  **Enable Authentication:**
-    *   Go to **Build -> Authentication**.
-    *   Click **Get Started**.
-    *   Go to **Sign-in method** tab.
-    *   Enable **Email/Password**.
-    *   Enable **Google**.
-    *   Enable **Microsoft** (for Hotmail/Outlook users).
-3.  **Register Web App:**
-    *   Click the **Gear icon** (Project settings).
-    *   Scroll to **Your apps**.
-    *   Click the **</> (Web)** icon to register your app.
-    *   Copy the `firebaseConfig` keys. You will need these for your local environment (`.env.local`) and your CI/CD pipeline.
-
 ---
 
 ## Phase 2: Post-Terraform Actions & Verification

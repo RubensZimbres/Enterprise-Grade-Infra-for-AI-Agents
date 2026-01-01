@@ -57,12 +57,13 @@ FastAPIInstrumentor.instrument_app(app)
 LangChainInstrumentor().instrument()
 
 # Add CORS Middleware
+origins = ["http://localhost:3000"]
+if settings.FRONTEND_URL:
+    origins.append(settings.FRONTEND_URL)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "https://CHANGE_ME_TO_YOUR_DOMAIN.com"
-    ], # RESTRICTED: Match your frontend domain
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
