@@ -4,6 +4,7 @@ This repository contains a full-stack, secure AI platform deployed on Google Clo
 ## Architecture Overview
 ![Google Cloud Architecture](images/Google_Cloud_Architecture.jpg)
 *Figure 1: Google Cloud Platform Architecture*
+
 ![AWS Architecture](images/AWS_Architecture.jpg)
 *Figure 2: Correspondent AWS Architecture*
 
@@ -91,6 +92,26 @@ This platform implements a robust, multi-layered security strategy. The codebase
 *   **Prompt Injection Mitigation:** The RAG prompt template uses strict structural delimiters `----------`) and prioritized system instructions to ensure the model adheres to its enterprise role and ignores adversarial overrides contained within documents or user queries.
 *   **Sensitive Data Leakage (PII):** Google Cloud DLP (Data Loss Prevention) is integrated into the core pipeline with a Regex Fast-Path and Asynchronous Threading. This automatically detects and masks PII in real-time without blocking the main event loop, ensuring high performance while minimizing API costs.
 *   **Knowledge Base Security:** Data is stored in a private Cloud SQL (PostgreSQL) instance reachable only via a Serverless VPC Access connector, ensuring the "Brain" of the AI is never exposed to the public internet.
+### 4. MAESTRO Framework
+
+* **Preventing Wallet Exhaustion (Rate Limiting & Input Validation)**
+   - **Action:** Reduced API rate limit: 10/minute for authenticated users.
+   - **Action:** Added a `validate_token_count` function (using a lightweight 4-char/token heuristic) to strictly enforce input size limits before processing, rejecting requests that exceed the limit (2000 tokens) with a 400 error.
+
+* **RAG Hardening (Prompt Injection Defense)**
+   - **Action:** Prompt Templates with Cache Hit and Cache Miss scenarios.
+   - **Action:** "Sandwich Defense" using XML tagging (`<trusted_knowledge_base>`) and explicit instructions to ignore external commands found within the retrieved context.
+
+* **Guardrail Layer (Improved Security Judge)**
+   - **Action:** Regex `SecurityBlocker` for low-latency filtering of obvious attacks.
+   - **Action:** The `security_judge_llm` uses a more specific system prompt acting as a specialized classifier ("SAFE" vs "BLOCKED").
+   - **Action:** Google's Native Content Safety Settings (`HarmBlockThreshold.BLOCK_LOW_AND_ABOVE`) on the Judge model to leverage Vertex AI's built-in safety classifiers for Hate Speech, Dangerous Content, etc.
+
+* **Model Safety (Generation Hardening)**
+   - **Action:** Strict `SAFETY_SETTINGS` (blocking low and above harm probability) to the main RAG generation models (`ChatVertexAI`). This acts as a final line of defense against generating harmful content, even if prompt injection succeeds.
+
+**Note on Streaming DLP:**
+The current `protected_chain_stream` sanitizes the input but streams the output directly from the LLM to the client to maintain responsiveness. By enforcing the strict `SAFETY_SETTINGS` on the generation model itself, we have mitigated the risk of the model generating harmful content, serving as an effective output guardrail for the streaming endpoint.
 
 ## Enhanced Enterprise Architecture (Optimized)
 This platform has been upgraded for production-scale performance, cost efficiency, and sub-second perceived latency:

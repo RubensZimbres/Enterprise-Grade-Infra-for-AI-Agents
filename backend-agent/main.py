@@ -57,7 +57,7 @@ async def startup_event():
         logger.info("✅ Database connection successful.")
     except Exception as e:
         logger.error(f"❌ Database connection failed: {e}")
-    
+
     # Check Settings (Redacted)
     logger.info(f"Config: DB_HOST={settings.DB_HOST}, REDIS_HOST={settings.REDIS_HOST}")
 
@@ -116,6 +116,15 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     response: str
 
+def validate_token_count(text: str, limit: int = 2000):
+    """
+    Validates that the message token count is within limits.
+    Uses a rough approximation (4 chars = 1 token) to avoid heavy dependencies like tiktoken.
+    """
+    estimated_tokens = len(text) / 4
+    if estimated_tokens > limit:
+        raise HTTPException(status_code=400, detail=f"Message too long. Estimated tokens: {int(estimated_tokens)}, Limit: {limit}")
+
 @app.get("/health")
 def health_check():
     return {"status": "healthy"}
@@ -126,7 +135,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None),
     Handle Stripe Webhooks to update user subscription status.
     """
     payload = await request.body()
-    
+
     try:
         event = stripe.Webhook.construct_event(
             payload, stripe_signature, STRIPE_WEBHOOK_SECRET
@@ -144,7 +153,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None),
         session = event['data']['object']
         customer_email = session.get('customer_email')
         customer_id = session.get('customer')
-        
+
         if customer_email:
             crud.update_user_subscription(db, customer_email, 'active', customer_id)
             # Log customer_id instead of email for privacy
@@ -154,53 +163,59 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None),
         invoice = event['data']['object']
         customer_email = invoice.get('customer_email')
         customer_id = invoice.get('customer')
-        
+
         if customer_email:
             crud.update_user_subscription(db, customer_email, 'active', customer_id)
             logger.info(f"Renewed subscription for customer_id: {customer_id}")
-            
+
     elif event['type'] == 'customer.subscription.deleted':
         subscription = event['data']['object']
         # We need to find the user by customer_id since email might not be in this event
         # For simplicity, assuming we can query by customer_id if we added it to the model (we did)
-        # Note: In a real app, query by stripe_customer_id. 
-        # Since our CRUD uses email as primary key, we might need a lookup or just rely on the fact 
+        # Note: In a real app, query by stripe_customer_id.
+        # Since our CRUD uses email as primary key, we might need a lookup or just rely on the fact
         # that 'customer.subscription.deleted' usually has the customer object expanded or we query Stripe.
-        # For this MVP, we will skip complex reverse lookup unless critical. 
-        pass 
+        # For this MVP, we will skip complex reverse lookup unless critical.
+        pass
 
     return {"status": "success"}
 
 @app.post("/chat", response_model=ChatResponse)
-@limiter.limit("60/minute")
+@limiter.limit("10/minute")
 async def chat_endpoint(request: ChatRequest, fastapi_req: Request, user_email: str = Depends(get_current_user)):
     """
     Main entry point for the Frontend Agent.
     Handles RAG, Memory, and DLP.
     """
     try:
+        # Enforce Token Limits
+        validate_token_count(request.message, limit=2000)
+
         # FIX (IDOR): Scope the session_id to the authenticated user
         secure_session_id = f"{user_email}:{request.session_id}"
 
         # Invoke the chain with guardrails asynchronously
         response_text = await protected_chain_invoke(request.message, secure_session_id)
-        
+
         return ChatResponse(response=response_text)
-    
+
     except Exception as e:
         # Log the stack trace securely (Hidden from user)
         logger.error("Error processing request", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal Processing Error")
 
 @app.post("/stream")
-@limiter.limit("60/minute")
+@limiter.limit("10/minute")
 async def stream_endpoint(request: ChatRequest, fastapi_req: Request, user_email: str = Depends(get_current_user)):
     """
     Streaming version of the chat endpoint.
     """
     try:
+        # Enforce Token Limits
+        validate_token_count(request.message, limit=2000)
+
         secure_session_id = f"{user_email}:{request.session_id}"
-        
+
         return StreamingResponse(
             protected_chain_stream(request.message, secure_session_id),
             media_type="text/event-stream"
