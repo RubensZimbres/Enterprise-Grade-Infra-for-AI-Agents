@@ -5,12 +5,12 @@ data "google_project" "project" {}
 # --- 1. Identity: Service Accounts (The ID Cards) ---
 
 resource "google_service_account" "frontend_sa" {
-  account_id   = "ai-frontend-sa" 
+  account_id   = "ai-frontend-sa"
   display_name = "Frontend Agent Service Account"
 }
 
 resource "google_service_account" "backend_sa" {
-  account_id   = "ai-backend-sa" 
+  account_id   = "ai-backend-sa"
   display_name = "Backend Agent Service Account"
 }
 
@@ -18,7 +18,7 @@ resource "google_service_account" "backend_sa" {
 
 # Allow Backend to read the DB Password from Secret Manager
 resource "google_secret_manager_secret_iam_member" "backend_secret_access" {
-  secret_id = var.db_secret_id 
+  secret_id = var.db_secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.backend_sa.email}"
 }
@@ -63,15 +63,15 @@ resource "google_project_iam_member" "backend_dlp_user" {
 resource "google_cloud_run_v2_service" "backend" {
   name     = "backend-agent"
   location = var.region
-  ingress  = "INGRESS_TRAFFIC_INTERNAL_ONLY" 
+  ingress  = "INGRESS_TRAFFIC_INTERNAL_ONLY"
 
   template {
     service_account = google_service_account.backend_sa.email
     timeout         = "300s"
-    
+
     scaling {
-      min_instance_count = 1 
-      max_instance_count = 20 
+      min_instance_count = 0
+      max_instance_count = 20
     }
 
     vpc_access{
@@ -79,11 +79,11 @@ resource "google_cloud_run_v2_service" "backend" {
         network    = var.vpc_name
         subnetwork = var.subnet_name
       }
-      egress = "ALL_TRAFFIC" 
+      egress = "ALL_TRAFFIC"
     }
 
     containers {
-      image = "us-docker.pkg.dev/cloudrun/container/hello" 
+      image = "us-docker.pkg.dev/cloudrun/container/hello"
 
       # ADDED: Auto-healing configuration
       startup_probe {
@@ -110,7 +110,7 @@ resource "google_cloud_run_v2_service" "backend" {
 
       resources {
         limits = {
-          cpu    = "2" 
+          cpu    = "2"
           memory = "4Gi"
         }
       }
@@ -125,11 +125,11 @@ resource "google_cloud_run_v2_service" "backend" {
       }
       env {
           name  = "DB_USER"
-          value = "postgres" 
+          value = "postgres"
         }
       env {
         name  = "DB_NAME"
-        value = "postgres" 
+        value = "postgres"
       }
       env {
         name  = "DB_HOST"
@@ -157,15 +157,15 @@ resource "google_cloud_run_v2_service" "backend" {
 resource "google_cloud_run_v2_service" "frontend" {
   name     = "frontend-agent"
   location = var.region
-  ingress  = "INGRESS_TRAFFIC_ALL" 
+  ingress  = "INGRESS_TRAFFIC_ALL"
 
   template {
     service_account = google_service_account.frontend_sa.email
     timeout         = "300s"
-    
+
     scaling {
-      min_instance_count = 1 
-      max_instance_count = 20 
+      min_instance_count = 0
+      max_instance_count = 20
     }
 
     vpc_access{
@@ -178,7 +178,7 @@ resource "google_cloud_run_v2_service" "frontend" {
 
     containers {
       image = "us-docker.pkg.dev/cloudrun/container/hello"
-      
+
       resources {
         limits = {
           cpu    = "1"
@@ -221,8 +221,8 @@ resource "google_cloud_run_v2_job" "ingest_job" {
 
   template {
     template {
-      service_account = google_service_account.backend_sa.email 
-      timeout = "600s" 
+      service_account = google_service_account.backend_sa.email
+      timeout = "600s"
 
       vpc_access{
         network_interfaces {
@@ -233,8 +233,8 @@ resource "google_cloud_run_v2_job" "ingest_job" {
       }
 
       containers {
-        image = "us-docker.pkg.dev/cloudrun/container/hello" 
-        
+        image = "us-docker.pkg.dev/cloudrun/container/hello"
+
         command = ["python", "ingest.py"]
 
         resources {
@@ -254,7 +254,7 @@ resource "google_cloud_run_v2_job" "ingest_job" {
         }
         env {
             name  = "DB_USER"
-            value = "postgres" 
+            value = "postgres"
           }
         env {
           name  = "DB_NAME"
