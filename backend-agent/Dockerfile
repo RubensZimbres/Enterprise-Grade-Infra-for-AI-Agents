@@ -14,13 +14,3 @@ RUN chown -R appuser:appgroup /app
 USER appuser
 
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
-
-# gcloud builds submit --tag gcr.io/YOUR_PROJECT/ingest-job
-
-#gcloud run jobs create ingest-job \
-#  --image gcr.io/YOUR_PROJECT/ingest-job \
-#  --region us-central1 \
-#  --vpc-connector YOUR_CONNECTOR_OR_DIRECT_VPC \
-#  --set-env-vars DB_HOST=10.x.x.x,DB_PASSWORD=secret
-
-# gcloud run jobs execute ingest-job
