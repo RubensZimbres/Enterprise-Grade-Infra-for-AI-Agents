@@ -412,6 +412,16 @@ gcloud projects add-iam-policy-binding $(gcloud config get-value project) \
 gcloud projects add-iam-policy-binding $(gcloud config get-value project) \
   --member="serviceAccount:${PROJECT_NUMBER}@cloudbuild.gserviceaccount.com" \
   --role="roles/artifactregistry.writer"
+
+# Grant Cloud Build Service Account permissions to deploy to Cloud Run
+gcloud projects add-iam-policy-binding $(gcloud config get-value project) \
+  --member="serviceAccount:${PROJECT_NUMBER}@cloudbuild.gserviceaccount.com" \
+  --role="roles/run.developer"
+
+# Grant Cloud Build Service Account permission to act as other service accounts (required for Cloud Run deploy)
+gcloud projects add-iam-policy-binding $(gcloud config get-value project) \
+  --member="serviceAccount:${PROJECT_NUMBER}@cloudbuild.gserviceaccount.com" \
+  --role="roles/iam.serviceAccountUser"
 ```
 To deploy manually, run:
 
