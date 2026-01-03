@@ -588,7 +588,7 @@ Terraform will perform the following actions:
 
           [32m+[0m[0m scaling {
               [32m+[0m[0m max_instance_count = 20
-              [32m+[0m[0m min_instance_count = 1
+              [32m+[0m[0m min_instance_count = 0
             }
 
           [32m+[0m[0m vpc_access {
@@ -662,7 +662,7 @@ Terraform will perform the following actions:
 
           [32m+[0m[0m scaling {
               [32m+[0m[0m max_instance_count = 20
-              [32m+[0m[0m min_instance_count = 1
+              [32m+[0m[0m min_instance_count = 0
             }
 
           [32m+[0m[0m vpc_access {
