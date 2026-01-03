@@ -185,65 +185,53 @@ The following table details the Zero-Trust permission model enforced by the infr
 
 ---
 
-# Deployment Guide: A Step-by-Step Walkthrough
+# Deployment Guide: From Zero to Production
 
-## Phase 1: Pre-Terraform Setup (Manual Steps)
-These actions prepare your Google Cloud project and grant the necessary permissions for Terraform and Cloud Build to run.
+This guide assumes you have a Google Cloud Project and the necessary CLI tools installed (`gcloud`, `terraform`, `docker`, `npm`, `python`).
 
-### Step 1: Create a Google Cloud Project via Console
-First, create your Google Cloud project through the Google Cloud Console if you haven't already.
+## Phase 1: Pre-Terraform Setup (Manual Actions)
 
-### Step 2: Authenticate in Google Cloud via CLI + Set Region and Project
-Log in and set up your project configuration.
+### Step 1: Google Cloud Project Setup
+1.  **Create/Select a Project:**
+    ```bash
+    gcloud auth login
+    gcloud config set project [YOUR_PROJECT_ID]
+    gcloud config set compute/region us-central1
+    ```
+2.  **Link Billing:** Ensure your project is linked to a Billing Account.
+3.  **Enable APIs:**
+    ```bash
+    gcloud services enable \
+      compute.googleapis.com \
+      iam.googleapis.com \
+      run.googleapis.com \
+      artifactregistry.googleapis.com \
+      cloudbuild.googleapis.com \
+      secretmanager.googleapis.com \
+      sqladmin.googleapis.com \
+      firestore.googleapis.com \
+      dlp.googleapis.com \
+      aiplatform.googleapis.com \
+      redis.googleapis.com \
+      cloudfunctions.googleapis.com \
+      storage.googleapis.com
+    ```
+
+### Step 2: GitHub Connection (Critical)
+Terraform creates Cloud Build triggers that watch your repo. You **must** connect your repository to Google Cloud Build manually before running Terraform.
+
+1.  Go to the [Cloud Build Triggers page](https://console.cloud.google.com/cloud-build/triggers).
+2.  Click **Manage Repositories** -> **Connect Repository**.
+3.  Select **GitHub** and follow the authorization flow.
+4.  Select the repository containing this code.
+
+### Step 3: Grant IAM Permissions
+Terraform needs permission to manage IAM policies, and Cloud Build needs permission to deploy.
+
 ```bash
-# Log in to your Google Cloud account
-gcloud auth login
-
-# Set the project you will be working on
-gcloud config set project [YOUR_PROJECT_ID]
-
-# Set your preferred region
-gcloud config set compute/region [YOUR_REGION]
-
-# Link your project to a billing account (required to use most services)
-gcloud beta billing projects link [YOUR_PROJECT_ID] --billing-account [YOUR_BILLING_ACCOUNT_ID]
-```
-
-### Step 3: Enable Required Google Cloud APIs
-Terraform will require enablement of these resources.
-```bash
-# Enable all necessary APIs for the platform
-gcloud services enable \
-  compute.googleapis.com \
-  iam.googleapis.com \
-  iamcredentials.googleapis.com \
-  run.googleapis.com \
-  artifactregistry.googleapis.com \
-  cloudbuild.googleapis.com \
-  secretmanager.googleapis.com \
-  sqladmin.googleapis.com \
-  firestore.googleapis.com \
-  serviceusage.googleapis.com \
-  servicenetworking.googleapis.com \
-  dlp.googleapis.com \
-  aiplatform.googleapis.com \
-  redis.googleapis.com \
-  cloudfunctions.googleapis.com \
-  eventarc.googleapis.com \
-  storage.googleapis.com \
-  billingbudgets.googleapis.com \
-  monitoring.googleapis.com \
-  logging.googleapis.com
-```
-
-### Step 4: Grant Permissions
-#### Grant Permissions to the Cloud Build Service Account
-The `cloudbuild-*.yaml` files build and deploy the applications. The default Cloud Build service account needs permission to do so.
-```bash
-# Get your project number
 PROJECT_NUMBER=$(gcloud projects describe $(gcloud config get-value project) --format="value(projectNumber)")
 
-# Grant Cloud Build permissions to deploy to Cloud Run and manage associated resources
+# Grant Cloud Build permissions
 gcloud projects add-iam-policy-binding $(gcloud config get-value project) \
   --member="serviceAccount:${PROJECT_NUMBER}@cloudbuild.gserviceaccount.com" \
   --role="roles/run.admin"
@@ -252,275 +240,97 @@ gcloud projects add-iam-policy-binding $(gcloud config get-value project) \
   --member="serviceAccount:${PROJECT_NUMBER}@cloudbuild.gserviceaccount.com" \
   --role="roles/iam.serviceAccountAdmin"
 
-# Grant Cloud Build permissions to push images to Artifact Registry
 gcloud projects add-iam-policy-binding $(gcloud config get-value project) \
   --member="serviceAccount:${PROJECT_NUMBER}@cloudbuild.gserviceaccount.com" \
   --role="roles/artifactregistry.writer"
 ```
 
-#### Grant Permissions to the Backend Service Account
-The backend agent uses Google Cloud DLP for de-identifying PII. The backend service account needs permission to call the DLP API.
-```bash
-# Grant the Backend service account permission to use DLP
-gcloud projects add-iam-policy-binding $(gcloud config get-value project) \
-  --member="serviceAccount:ai-backend-sa@$(gcloud config get-value project).iam.gserviceaccount.com" \
-  --role="roles/dlp.user"
+## Phase 2: Terraform Configuration
 
-#### Grant Billing Permissions to the Deployment User
-To create the billing budget, the user running Terraform must have permissions on the Billing Account.
-```bash
-# Grant Billing Account Costs Manager role (replace [YOUR_BILLING_ACCOUNT_ID] and [YOUR_EMAIL])
-gcloud beta billing accounts add-iam-policy-binding [YOUR_BILLING_ACCOUNT_ID] \
-    --member="user:[YOUR_EMAIL]" \
-    --role="roles/billing.costsManager"
+### Step 4: Create `terraform.tfvars`
+Create a file named `terraform/terraform.tfvars` and populate it with your specific configuration.
+
+```hcl
+project_id         = "your-project-id"
+region             = "us-central1"
+domain_name        = "ai.your-domain.com"  # The domain you will use for the frontend
+github_owner       = "your-github-username"
+github_repo_name   = "your-repo-name"
+billing_account    = "000000-000000-000000" # Your Billing Account ID
+notification_email = "admin@example.com"    # For budget alerts
 ```
 
-### Step 5: Create Secrets in Secret Manager
-To deploy this platform securely, you must configure the following secrets in **Google Secret Manager**.
+## Phase 3: Infrastructure Deployment
 
-| Secret Name | Description | Required By |
-| :--- | :--- | :--- |
-| `PROJECT_ID` | Your Google Cloud Project ID. | Backend |
-| `REGION` | GCP region (e.g., `us-central1`). | Backend, Ingest |
-| `DB_HOST` | IP of your Cloud SQL instance (or `127.0.0.1` if using the Cloud SQL Auth Proxy). | Backend, Ingest |
-| `DB_USER` | Database username (default: `postgres`). | Backend, Ingest |
-| `DB_PASSWORD` | Password for the Cloud SQL (Postgres) 'postgres' user. | Backend, Terraform |
-| `DB_NAME` | Name of the database (default: `postgres`). | Backend, Ingest |
-| `DATABASE_URL` | Full SQLAlchemy connection string (e.g., `postgresql://user:pass@10.x.x.x/postgres`). | Backend |
-| `REDIS_HOST` | Hostname/IP of the Redis instance. | Backend |
-| `GOOGLE_API_KEY` | (Optional) API Key for Gemini/Vertex AI if not using ADC. | Backend |
-| `STRIPE_API_KEY` | Stripe Secret Key `sk_live_...`). | Backend |
-| `STRIPE_WEBHOOK_SECRET` | Stripe Webhook Signing Secret `whsec_...`). | Backend |
-| `BACKEND_URL` | The internal URL of the backend (e.g. `http://localhost:8080`). Used by the server-side proxy. | Frontend |
-| `NEXT_PUBLIC_FIREBASE_API_KEY` | Firebase API Key. | Frontend |
-| `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | Firebase Auth Domain. | Frontend |
-| `NEXT_PUBLIC_FIREBASE_PROJECT_ID` | Firebase Project ID. | Frontend |
-| `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` | Firebase Storage Bucket. | Frontend |
-| `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | Firebase Messaging Sender ID. | Frontend |
-| `NEXT_PUBLIC_FIREBASE_APP_ID` | Firebase App ID. | Frontend |
-
-> **Note on Authentication:** The frontend uses Firebase. For local backend testing, you can use the `Bearer MOCK_TOKEN` header if `DEBUG=true` is set on the backend.
-> **Note:** Frontend configuration variables (e.g., `NEXT_PUBLIC_FIREBASE_API_KEY`, `BACKEND_URL`) are not strictly "secrets" but should be managed via Cloud Run Environment Variables or build args.
-
-### Step 6: Create Bucket for Disaster Recovery and Google Cloud Functions
-Set up Cloud Storage buckets for disaster recovery and Cloud Functions document ingestion.
-
-### Step 7: Set Up Environment Variables
-Configure environment variables for both backend and frontend applications (see Local Development Setup section for details).
-
-### Step 8: Set Up Firebase
-**Configure Firebase (Detailed Steps):**
-The frontend uses Firebase for User Authentication.
-1.  Go to [Firebase Console](https://console.firebase.google.com).
-2.  **Create a Project:** Select your existing Google Cloud Project or create a new one.
-3.  **Enable Authentication:**
-    *   Navigate to **Build** -> **Authentication**.
-    *   Click **Get Started**.
-    *   Select **Sign-in method** tab.
-    *   Enable **Email/Password** and **Google**.
-4.  **Get Configuration:**
-    *   Click the **Gear icon** (Project Settings) -> **General**.
-    *   Scroll down to **Your apps**.
-    *   Click the **</> (Web)** icon.
-    *   Register the app (e.g., "AI Platform Local").
-    *   **Copy the `firebaseConfig` object.**
-
----
-
-## Local Development Setup
-This section guides you through running the entire stack (Database, Backend, Frontend) on your machine.
-
-### Step 9: Test Frontend and Backend Locally
-
-#### Local Infrastructure (Database & Cache)
-Instead of connecting to remote Cloud SQL instances (which is slow and insecure for local dev), we will use Docker to spin up a local **PostgreSQL with pgvector** and **Redis**.
-
-1.  Get the file named `docker-compose.yaml` in the root directory:
-2.  **Start the Services:**
-    Open your terminal in the project root and run:
-    ```bash
-    docker-compose up -d
-    ```
-    *   Verify they are running with `docker ps`. You should see two containers (postgres and redis) up and healthy.
-    *   **Note:** If you don't have `docker-compose` installed, you might need to use `docker compose up -d` (v2).
-3.  **Initialize the Vector Database & Users Table:**
-    You need to enable the `vector` extension and ensure the `users` table exists.
-    Connect to your local database (using DBeaver, pgAdmin, or command line):
-    ```bash
-    # Get container ID and connect to the local docker container
-    docker ps
-    docker exec -it <container_id_of_postgres> psql -U postgres
-    ```
-    Run the following SQL commands inside the psql prompt:
-    ```sql
-    CREATE EXTENSION IF NOT EXISTS vector;
-    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-    CREATE TABLE IF NOT EXISTS users (
-        email VARCHAR PRIMARY KEY,
-        is_active BOOLEAN DEFAULT FALSE,
-        stripe_customer_id VARCHAR,
-        subscription_status VARCHAR DEFAULT 'inactive',
-        created_at TIMESTAMPTZ DEFAULT NOW(),
-        updated_at TIMESTAMPTZ
-    );
-    INSERT INTO users (email, is_active, subscription_status)
-    VALUES ('test@example.com', true, 'active');
-    ```
-
-#### Backend Setup (FastAPI)
-The backend `rag_chain.py`) relies on **Google Cloud Firestore** for chat history and **Vertex AI** for embeddings. For local development, we connect to these real cloud services securely.
-
-1.  **GCP Authentication (Required for Firestore & Vertex AI):**
-    The backend uses Application Default Credentials (ADC) to connect to GCP.
-    ```bash
-    gcloud auth application-default login
-    ```
-    *   This will open a browser window to login. Ensure you select the project defined in your `.env`.
-    *   **Firestore Setup:** Ensure you have created a Firestore database (Native Mode) in your Google Cloud Project via the Console.
-2.  **Configure Environment Variables:**
-    Create a `.env` file in the `backend-agent/` directory:
-    ```bash
-    PROJECT_ID="your-google-cloud-project-id"
-    REGION="us-central1"
-    # Database (Matches docker-compose)
-    DB_HOST="localhost"
-    DB_USER="postgres"
-    DB_PASSWORD="password"
-    DB_NAME="postgres"
-    DATABASE_URL="postgresql+asyncpg://postgres:password@localhost:5432/postgres"
-    # Redis
-    REDIS_HOST="localhost"
-    # Stripe (Get these from Stripe Dashboard -> Developers -> API Keys)
-    STRIPE_API_KEY="sk_test_..."
-    STRIPE_WEBHOOK_SECRET="whsec_..."
-    # Google Cloud
-    # GOOGLE_API_KEY is optional if you have run 'gcloud auth application-default login'
-    ```
-3.  **Install Dependencies & Run:**
-    ```bash
-    cd backend-agent
-    python3 -m venv myenv
-    source myenv/bin/activate
-    pip install -r requirements.txt
-    # Run the server
-    uvicorn main:app --reload --host 0.0.0.0 --port 8080
-    ```
-    The backend is now running at `http://localhost:8080`.
-4.  **Ingest Documents (RAG):**
-    To test the vector search, you need to ingest some data into your local database.
-    *   Place PDF files in `backend-agent/data/`.
-    *   Run the ingestion script:
-    ```bash
-    python ingest.py
-    ```
-
-#### Frontend Setup (Next.js)
-1.  **Configure Environment Variables:**
-    Create a `.env.local` file in the `frontend-nextjs/` directory and populate it with your Firebase keys:
-    ```bash
-    NEXT_PUBLIC_FIREBASE_API_KEY="AIzaSy..."
-    NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN="your-project.firebaseapp.com"
-    NEXT_PUBLIC_FIREBASE_PROJECT_ID="your-project"
-    NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET="your-project.appspot.com"
-    NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID="123..."
-    NEXT_PUBLIC_FIREBASE_APP_ID="1:123..."
-    # Backend URL (Server-side proxy points here)
-    BACKEND_URL="http://localhost:8080"
-    ```
-2.  **Install & Run:**
-    ```bash
-    cd frontend-nextjs
-    npm install
-    npm run dev
-    ```
-    The frontend is now running at `http://localhost:3000`.
-
-#### Stripe Webhooks (Optional)
-To test payments locally:
+### Step 5: Run Terraform
 ```bash
-stripe listen --forward-to localhost:8080/webhook
-```
-Copy the webhook signing secret output by this command into your backend `.env` file `STRIPE_WEBHOOK_SECRET`).
-
----
-
-## CI/CD Implementation
-
-### Step 10: Set Up CI/CD - Create Cloud Build Trigger
-This section covers the automated CI/CD pipeline using Cloud Build triggers connected to GitHub.
-
-#### Overview
-The CI/CD infrastructure automates the build and deployment process whenever changes are pushed to the repository. It consists of:
-
-**Artifact Registry:** A Docker repository (cloud-run-source-deploy) for storing container images.
-**Cloud Build Triggers:** Automated triggers that watch specific paths in the repository and execute the corresponding build configurations.
-
-#### Steps:
-1. Connect GitHub to GCP (Prerequisite):
-   * Go to the Google Cloud Console > Cloud Build > Triggers (https://console.cloud.google.com/cloud-build/triggers).
-   * Click Manage Repositories > Connect Repository.
-   * Select GitHub and follow the authorization flow (this installs the Google Cloud Build App on your GitHub account).
-   * If you skip this, Terraform will fail to create the triggers even if you provide the correct names.
-
----
-
-## Phase 2: Deploy via Terraform
-
-### Step 11: Deploy via Terraform
-Run Terraform to provision all infrastructure.
-
-```bash
+cd terraform
 terraform init
 terraform plan
 terraform apply
 ```
+*Type `yes` when prompted.*
 
----
+This process will take 15-20 minutes. It creates:
+*   VPC Network & Serverless Access
+*   Cloud SQL (PostgreSQL) & Redis
+*   Cloud Run Services (Frontend & Backend)
+*   Cloud Function (PDF Ingest)
+*   Secret Manager placeholders
 
-## Phase 3: Post-Terraform Actions & Verification
-After `terraform apply` completes successfully, perform these final steps to make the application fully functional.
+### Step 6: Configure Secrets
+Terraform created the *containers* for your secrets, but you need to add the *values*.
 
-### Step 12: Enable pgvector in Cloud SQL
-The Terraform code correctly provisions the Cloud SQL instance with flags optimized for `pgvector`, but it cannot enable the extension itself.
+1.  **Stripe Keys:**
+    *   Find the secret `STRIPE_SECRET_KEY` in Secret Manager and add a new version with your Stripe **Secret Key**.
+    *   Find the secret `STRIPE_PUBLISHABLE_KEY` and add your Stripe **Publishable Key**.
+    
+2.  **Missing Secrets (Manual Creation):**
+    Due to backend configuration requirements, you must manually create the following secrets:
+    ```bash
+    # Create Stripe Webhook Secret (from Stripe Dashboard)
+    gcloud secrets create STRIPE_WEBHOOK_SECRET --replication-policy="automatic"
+    echo -n "whsec_..." | gcloud secrets versions add STRIPE_WEBHOOK_SECRET --data-file=-
 
-1.  **Connect to the Cloud SQL instance:** Use your preferred PostgreSQL client (like `psql` or a GUI tool) to connect to the database using the IP address and the password stored in Secret Manager.
-2.  **Run the SQL Command:** Execute the following command in your database to enable the vector extension.
+    # Create Google API Key (Optional, if not using ADC)
+    gcloud secrets create GOOGLE_API_KEY --replication-policy="automatic"
+    echo -n "AIzaSy..." | gcloud secrets versions add GOOGLE_API_KEY --data-file=-
+    
+    # Create DB_HOST secret (Required by current backend config)
+    # Use the IP address output by Terraform (module.database.instance_ip)
+    gcloud secrets create DB_HOST --replication-policy="automatic"
+    echo -n "10.x.x.x" | gcloud secrets versions add DB_HOST --data-file=-
+    ```
+
+## Phase 4: Application Deployment
+
+### Step 7: Finalize Database Setup
+1.  **Enable pgvector:**
+    Connect to your new Cloud SQL instance (via Cloud Shell or a Jump Host) and run:
     ```sql
     CREATE EXTENSION IF NOT EXISTS vector;
     ```
+    *Note: The password for the `postgres` user is in the Secret Manager under `[project-id]-cloudsql-password`.*
 
-### Update DNS "A" Record
-The Terraform `ingress` module provisioned a static IP for the load balancer. You must point your domain to it.
+### Step 8: Deploy Code
+Terraform deployed "Hello World" placeholders. Now, push your code to deploy the actual apps.
 
-1.  **Get the Load Balancer IP Address:**
+1.  **Trigger Cloud Build:**
     ```bash
-    terraform output public_ip
+    # Deploy Backend
+    gcloud builds submit --config cloudbuild-backend.yaml .
+    
+    # Deploy Frontend
+    gcloud builds submit --config cloudbuild-frontend.yaml .
     ```
-2.  **Update Your DNS:**
-    *   Go to your domain registrar (e.g., Google Domains, Cloudflare, GoDaddy).
-    *   Create or update the **"A" record** for the domain you specified in `terraform.tfvars` (e.g., `ai.your-company.com`).
-    *   Point it to the IP address from the Terraform output.
 
-**Note:** The managed SSL certificate and HTTPS routing will not work until your domain correctly resolves to the load balancer's IP address.
-
-### Set the AI Provider API Key
-The backend's Terraform configuration references a secret for the AI provider's API key. You must update the placeholder value with your real key.
-```bash
-# Add the first version of the secret with your actual API key
-gcloud secrets versions add ai-provider-api-key --data-file="/path/to/your/api_key.txt"
-```
-
-### Trigger Cloud Build to Deploy Your Code
-Terraform has set up the infrastructure, but it uses a placeholder "hello world" container. You now need to run your Cloud Build pipelines to deploy your actual frontend and backend applications with the new resiliency features.
-```bash
-# Deploy the backend agent
-gcloud builds submit --config cloudbuild-backend.yaml .
-
-# Deploy the Next.js frontend
-gcloud builds submit --config cloudbuild-frontend.yaml .
-```
-
-**Final step:** Replaces the placeholder services with your actual Next.js and FastAPI applications, making the platform live.
+### Step 9: DNS Setup
+1.  Get the Load Balancer IP:
+    ```bash
+    cd terraform && terraform output public_ip
+    ```
+2.  Update your DNS provider (e.g., GoDaddy, Cloudflare) to point your domain (e.g., `ai.your-domain.com`) to this IP.
+3.  Wait 15-30 minutes for the managed SSL certificate to provision.
 
 ---
 
