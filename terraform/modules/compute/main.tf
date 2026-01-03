@@ -148,10 +148,8 @@ resource "google_cloud_run_v2_service" "backend" {
         name  = "REDIS_HOST"
         value = var.redis_host
       }
-      env {
-        name  = "FRONTEND_URL"
-        value = google_cloud_run_v2_service.frontend.uri
-      }
+      # FRONTEND_URL removed to avoid circular dependency (Cycle: backend -> frontend -> backend)
+      # If needed for CORS, consider using a wildcard or updating after creation.
     }
   }
 }
