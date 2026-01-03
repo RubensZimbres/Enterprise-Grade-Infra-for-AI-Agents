@@ -185,6 +185,175 @@ The following table details the Zero-Trust permission model enforced by the infr
 
 ---
 
+# Local Development Guide
+
+This guide details how to run the Enterprise AI Platform locally for development and testing.
+
+## Prerequisites
+
+*   **Docker Desktop** (for running the database and cache locally).
+*   **Python 3.10+** (for the Backend).
+*   **Node.js 18+** (for the Frontend).
+*   **Google Cloud Project** with Firebase Authentication enabled.
+*   **Stripe Account** (for testing payments).
+
+---
+
+## 1. External Services Setup
+
+Since this is a cloud-native application, you need to connect to a few real external services even for local development.
+
+### A. Firebase (Authentication)
+1.  Go to the [Firebase Console](https://console.firebase.google.com/).
+2.  Create a project (or use an existing one).
+3.  Enable **Authentication** and set up the **Email/Password** provider.
+4.  Go to **Project Settings > General** and scroll to "Your apps".
+5.  Select "Web app", register it, and copy the `firebaseConfig` object. You will need these values for the Frontend.
+6.  **Service Account Key (for Backend):**
+    *   Go to **Project Settings > Service accounts**.
+    *   Click "Generate new private key".
+    *   Save this JSON file as `service-account-key.json` in the root of the `backend-agent` directory. **DO NOT COMMIT THIS FILE.**
+
+### B. Stripe (Payments)
+1.  Go to the [Stripe Dashboard](https://dashboard.stripe.com/).
+2.  Enable "Test Mode".
+3.  Get your **Publishable Key** and **Secret Key**.
+4.  Create a **Webhook** endpoint pointing to `http://localhost:8080/webhook` (you may need a tool like `ngrok` or Stripe CLI to forward local events, or just mock the payment flow in the DB manually).
+
+---
+
+## 2. Local Infrastructure (Database & Cache)
+
+We will use Docker Compose to run PostgreSQL (with `pgvector`) and Redis locally.
+
+Use the `docker-compose.yml` file in the root of the project:
+
+Start the infrastructure:
+```bash
+docker-compose up -d
+```
+
+---
+
+## 3. Backend Setup
+
+### Configuration
+Create a `.env` file in `backend-agent/`:
+
+```env
+# Disable Secret Manager loading
+PROJECT_ID=""
+
+# Debug Mode
+DEBUG=true
+
+# Database (Matches docker-compose.yml)
+DB_HOST=localhost
+DB_USER=postgres
+DB_PASSWORD=password
+DB_NAME=postgres
+
+# Redis
+REDIS_HOST=localhost
+REDIS_PASSWORD=""
+
+# Stripe (From Step 1B)
+STRIPE_API_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+
+# Google Cloud (Required for Vertex AI & Firestore)
+# Ensure you are authenticated via 'gcloud auth application-default login'
+# OR set GOOGLE_APPLICATION_CREDENTIALS to your key file path
+GOOGLE_APPLICATION_CREDENTIALS=service-account-key.json
+
+# Vertex AI Region
+REGION=us-central1
+```
+
+### Installation & Run
+
+1.  Navigate to the backend directory:
+    ```bash
+    cd backend-agent
+    ```
+2.  Create a virtual environment:
+    ```bash
+    python -m venv venv
+    source venv/bin/activate  # Windows: venv\Scripts\activate
+    ```
+3.  Install dependencies:
+    ```bash
+    pip install -r requirements.txt
+    ```
+4.  Run the server:
+    ```bash
+    uvicorn main:app --reload --host 0.0.0.0 --port 8080
+    ```
+
+**Note:** The backend will attempt to connect to Google Cloud services (Vertex AI for embeddings, Firestore for chat history). Ensure your `service-account-key.json` has permissions for:
+*   `roles/aiplatform.user`
+*   `roles/datastore.user`
+
+---
+
+## 4. Frontend Setup
+
+### Configuration
+Create a `.env.local` file in `frontend-nextjs/`:
+
+```env
+# Backend URL (Proxy or Direct)
+BACKEND_URL=http://localhost:8080
+
+# Firebase Config (From Step 1A)
+NEXT_PUBLIC_FIREBASE_API_KEY=AIzaSy...
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=your-project-id
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your-project.appspot.com
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=...
+NEXT_PUBLIC_FIREBASE_APP_ID=...
+
+# Stripe Config (From Step 1B)
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_...
+```
+
+### Installation & Run
+
+1.  Navigate to the frontend directory:
+    ```bash
+    cd frontend-nextjs
+    ```
+2.  Install dependencies:
+    ```bash
+    npm install
+    ```
+3.  Run the development server:
+    ```bash
+    npm run dev
+    ```
+4.  Open [http://localhost:3000](http://localhost:3000).
+
+---
+
+## 5. Testing the Flow
+
+1.  **Sign Up:** Open the frontend and create an account via Firebase Auth.
+2.  **Payment (Manual Activation):** Since local Stripe webhooks might be tricky without `ngrok`, you can manually activate your user in the local database:
+    *   Connect to local Postgres:
+        ```bash
+        psql postgres://postgres:password@localhost:5432/postgres
+        ```
+    *   Find your user (created after login attempt) and update status:
+        ```sql
+        UPDATE users SET is_active = true WHERE email = 'your-email@example.com';
+        ```
+3.  **Chat:** You should now be able to access the chat interface. Messages will be:
+    *   Embedded via Vertex AI (Cloud).
+    *   Stored in Firestore (Cloud).
+    *   Vector-searched in Postgres (Local).
+
+---
+
 # Deployment Guide: From Zero to Production
 
 This guide assumes you have a Google Cloud Project and the necessary CLI tools installed (`gcloud`, `terraform`, `docker`, `npm`, `python`).
@@ -284,7 +453,7 @@ Terraform created the *containers* for your secrets, but you need to add the *va
 1.  **Stripe Keys:**
     *   Find the secret `STRIPE_SECRET_KEY` in Secret Manager and add a new version with your Stripe **Secret Key**.
     *   Find the secret `STRIPE_PUBLISHABLE_KEY` and add your Stripe **Publishable Key**.
-    
+
 2.  **Missing Secrets (Manual Creation):**
     Due to backend configuration requirements, you must manually create the following secrets:
     ```bash
@@ -295,7 +464,7 @@ Terraform created the *containers* for your secrets, but you need to add the *va
     # Create Google API Key (Optional, if not using ADC)
     gcloud secrets create GOOGLE_API_KEY --replication-policy="automatic"
     echo -n "AIzaSy..." | gcloud secrets versions add GOOGLE_API_KEY --data-file=-
-    
+
     # Create DB_HOST secret (Required by current backend config)
     # Use the IP address output by Terraform (module.database.instance_ip)
     gcloud secrets create DB_HOST --replication-policy="automatic"
@@ -319,7 +488,7 @@ Terraform deployed "Hello World" placeholders. Now, push your code to deploy the
     ```bash
     # Deploy Backend
     gcloud builds submit --config cloudbuild-backend.yaml .
-    
+
     # Deploy Frontend
     gcloud builds submit --config cloudbuild-frontend.yaml .
     ```
