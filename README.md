@@ -225,7 +225,15 @@ gcloud services enable \
   firestore.googleapis.com \
   serviceusage.googleapis.com \
   servicenetworking.googleapis.com \
-  dlp.googleapis.com
+  dlp.googleapis.com \
+  aiplatform.googleapis.com \
+  redis.googleapis.com \
+  cloudfunctions.googleapis.com \
+  eventarc.googleapis.com \
+  storage.googleapis.com \
+  billingbudgets.googleapis.com \
+  monitoring.googleapis.com \
+  logging.googleapis.com
 ```
 
 ### Step 4: Grant Permissions
@@ -257,6 +265,14 @@ The backend agent uses Google Cloud DLP for de-identifying PII. The backend serv
 gcloud projects add-iam-policy-binding $(gcloud config get-value project) \
   --member="serviceAccount:ai-backend-sa@$(gcloud config get-value project).iam.gserviceaccount.com" \
   --role="roles/dlp.user"
+
+#### Grant Billing Permissions to the Deployment User
+To create the billing budget, the user running Terraform must have permissions on the Billing Account.
+```bash
+# Grant Billing Account Costs Manager role (replace [YOUR_BILLING_ACCOUNT_ID] and [YOUR_EMAIL])
+gcloud beta billing accounts add-iam-policy-binding [YOUR_BILLING_ACCOUNT_ID] \
+    --member="user:[YOUR_EMAIL]" \
+    --role="roles/billing.costsManager"
 ```
 
 ### Step 5: Create Secrets in Secret Manager
