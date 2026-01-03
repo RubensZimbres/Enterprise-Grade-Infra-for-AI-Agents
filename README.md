@@ -413,6 +413,12 @@ gcloud projects add-iam-policy-binding $(gcloud config get-value project) \
   --member="serviceAccount:${PROJECT_NUMBER}@cloudbuild.gserviceaccount.com" \
   --role="roles/artifactregistry.writer"
 ```
+To deploy manually, run:
+
+```bash
+gcloud builds submit --config cloudbuild-backend.yaml .
+gcloud builds submit --config cloudbuild-frontend.yaml .
+```
 
 ## Phase 2: Terraform Configuration
 
