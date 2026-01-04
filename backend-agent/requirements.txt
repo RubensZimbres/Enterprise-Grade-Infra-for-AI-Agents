@@ -27,3 +27,8 @@ stripe
 sqlalchemy
 google-cloud-secret-managergoogle-genai
 tiktoken
+# Test Dependencies
+pytest
+pytest-asyncio
+pytest-mock
+httpx

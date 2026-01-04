@@ -352,6 +352,65 @@ NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_...
     *   Stored in Firestore (Cloud).
     *   Vector-searched in Postgres (Local).
 
+# Testing Guide
+
+This project contains automated tests for both the backend (FastAPI) and frontend (Next.js) applications. Follow the instructions below to run the tests.
+
+## Backend (FastAPI)
+
+The backend uses `pytest` for testing.
+
+### Prerequisites
+Ensure you have the Python dependencies installed:
+
+```bash
+cd backend-agent
+pip install -r requirements.txt
+```
+
+### Running Tests
+To run all tests:
+
+```bash
+# From the backend-agent directory
+pytest
+```
+
+### Directory Structure
+*   `tests/conftest.py`: Contains test fixtures (e.g., `client` for API requests, mocks).
+*   `tests/test_main.py`: Contains API endpoint tests.
+
+## Frontend (Next.js)
+
+The frontend uses `Jest` and `React Testing Library`.
+
+### Prerequisites
+Ensure you have the Node.js dependencies installed:
+
+```bash
+cd frontend-nextjs
+npm install
+```
+
+### Running Tests
+To run the test suite:
+
+```bash
+# From the frontend-nextjs directory
+npm test
+```
+
+To run tests in watch mode (re-runs on file changes):
+
+```bash
+npm run test:watch
+```
+
+### Directory Structure
+*   `__tests__/`: Contains the test files (e.g., `LandingPage.test.tsx`).
+*   `jest.config.ts`: Jest configuration.
+*   `jest.setup.ts`: Global test setup (e.g., loading `jest-dom` matchers).
+
 ---
 
 # Deployment Guide: From Zero to Production
