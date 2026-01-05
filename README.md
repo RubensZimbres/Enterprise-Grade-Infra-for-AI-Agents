@@ -352,6 +352,7 @@ NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_...
     *   Stored in Firestore (Cloud).
     *   Vector-searched in Postgres (Local).
 
+---
 # Testing Guide
 
 This project contains automated tests for both the backend (FastAPI) and frontend (Next.js) applications. Follow the instructions below to run the tests.

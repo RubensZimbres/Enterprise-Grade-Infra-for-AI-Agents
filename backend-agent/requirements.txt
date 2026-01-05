@@ -25,7 +25,8 @@ tenacity
 opentelemetry-instrumentation-langchain
 stripe
 sqlalchemy
-google-cloud-secret-managergoogle-genai
+google-cloud-secret-manager
+google-genai
 tiktoken
 # Test Dependencies
 pytest
