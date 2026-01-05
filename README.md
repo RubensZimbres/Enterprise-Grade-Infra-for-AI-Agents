@@ -14,7 +14,7 @@ This repository contains a full-stack, secure AI platform deployed on Google Clo
 ### Frontend (Next.js Agent)
 -   **Location:** `/frontend-nextjs`
 -   **Tech:** React 18, Tailwind CSS, Lucide Icons, Firebase.
--   **Resilience:** **Circuit Breaker** `opossum`) for fail-fast backend communication.
+-   **Resilience:** **Circuit Breaker** `opossum` for fail-fast backend communication.
 -   **Security:** Acts as a secure proxy to the Backend; Authentication handled via Firebase.
 -   **Scalability:** Configured with `min_instances = 1` for zero-latency response.
 
@@ -26,12 +26,15 @@ This repository contains a full-stack, secure AI platform deployed on Google Clo
 -   **Networking:** Set to `INGRESS_TRAFFIC_INTERNAL_ONLY` to ensure it is unreachable from the public internet.
 
 ### Infrastructure (Terraform Modules)
+-   *`cicd`**: CI/CD pipeline.
 -   *`network`**: VPC, Subnets, Cloud NAT, and PSA.
 -   *`compute`**: Cloud Run services and granular IAM policies.
 -   *`database`**: Cloud SQL (PostgreSQL) and Firestore (Chat History).
 -   *`redis`**: Memorystore for semantic caching.
 -   *`ingress`**: Global Load Balancer, Cloud Armor, and SSL.
 -   *`billing_monitoring`**: Budgets, Alert Policies, and Notification Channels.
+-   *`function`**: Google Cloud Functions for PDF Ingestion.
+-   *`storage`**: Buckets and lifecycle policies.
 
 ## Architecture Decisions & Rationale
 1. **Authentication: Google Identity (IAP) vs. Firebase**
@@ -165,7 +168,7 @@ Before running the project locally or deploying to the cloud, ensure you have th
 *   **Docker Desktop:** Required for running the local database (Postgres/Vector) and Redis.
 *   **Node.js (v18+):** For the Frontend.
 *   **Python (3.10+):** For the Backend.
-*   **Google Cloud CLI `gcloud`):** For authenticated access to GCP services (Vertex AI, Firestore, etc.).
+*   **Google Cloud CLI `gcloud`:** For authenticated access to GCP services (Vertex AI, Firestore, etc.).
 *   **Stripe CLI:** For testing payments locally.
 
 #### IAM Connectivity Matrix
@@ -374,7 +377,7 @@ To run all tests:
 
 ```bash
 # From the backend-agent directory
-pytest ./tests/test_main.py
+pytest
 ```
 
 ### Directory Structure
@@ -511,6 +514,7 @@ notification_email = "admin@example.com"    # For budget alerts
 ```bash
 cd terraform
 terraform init
+terraform validate
 terraform plan
 terraform apply
 ```

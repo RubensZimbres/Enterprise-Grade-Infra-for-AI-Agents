@@ -25,6 +25,7 @@ tenacity
 opentelemetry-instrumentation-langchain
 stripe
 sqlalchemy
+psycopg2-binary
 google-genai
 tiktoken
 # Test Dependencies

@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 # 1. Set required environment variables for testing
 os.environ["PROJECT_ID"] = "test-project"
 os.environ["REGION"] = "us-central1"
+os.environ["DATABASE_URL"] = "sqlite:///./test.db"
 
 # 2. Mock Google Cloud Secret Manager to avoid network calls during config import
 mock_secret_manager = MagicMock()
