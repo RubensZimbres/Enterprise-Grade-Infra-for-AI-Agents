@@ -374,7 +374,7 @@ To run all tests:
 
 ```bash
 # From the backend-agent directory
-pytest
+pytest ./tests/test_main.py
 ```
 
 ### Directory Structure
