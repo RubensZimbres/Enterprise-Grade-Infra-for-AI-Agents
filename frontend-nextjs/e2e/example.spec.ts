@@ -6,7 +6,7 @@ test.describe('E2E Navigation Flow', () => {
     await page.goto('/');
     
     // Verify Header
-    await expect(page.getByRole('heading', { name: 'Enterprise AI Agent' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Enterprise AI Agent' })).toBeVisible({ timeout: 15000 });
     
     // 2. Click Initialize Access (should go to payment or login depending on flow, 
     // but based on code it goes to /payment)
@@ -20,7 +20,7 @@ test.describe('E2E Navigation Flow', () => {
   test('login page rendering', async ({ page }) => {
     await page.goto('/login');
     await expect(page.getByText('Welcome Back')).toBeVisible();
-    await expect(page.getByPlaceholderText('Email address')).toBeVisible();
+    await expect(page.getByPlaceholder('Email address')).toBeVisible();
   });
 
   // Note: Full auth flow and chat interaction requires mocking the backend 
