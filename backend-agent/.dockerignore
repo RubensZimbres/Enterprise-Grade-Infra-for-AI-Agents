@@ -1,0 +1,17 @@
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.env
+.env.*
+.git
+.gitignore
+Dockerfile
+test.db
+.pytest_cache/
+tests/
+red_team_test.py
+pytest.ini
