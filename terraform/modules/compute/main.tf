@@ -79,7 +79,7 @@ resource "google_cloud_run_v2_service" "backend" {
         network    = var.vpc_name
         subnetwork = var.subnet_name
       }
-      egress = "ALL_TRAFFIC"
+      egress = "PRIVATE_RANGES_ONLY"
     }
 
     containers {
@@ -159,7 +159,7 @@ resource "google_cloud_run_v2_service" "backend" {
 resource "google_cloud_run_v2_service" "frontend" {
   name     = "frontend-agent"
   location = var.region
-  ingress  = "INGRESS_TRAFFIC_ALL"
+  ingress  = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
 
   template {
     service_account = google_service_account.frontend_sa.email
@@ -175,7 +175,7 @@ resource "google_cloud_run_v2_service" "frontend" {
         network    = var.vpc_name
         subnetwork = var.subnet_name
       }
-      egress = "ALL_TRAFFIC"
+      egress = "PRIVATE_RANGES_ONLY"
     }
 
     containers {
@@ -231,7 +231,7 @@ resource "google_cloud_run_v2_job" "ingest_job" {
           network    = var.vpc_name
           subnetwork = var.subnet_name
         }
-        egress = "ALL_TRAFFIC"
+        egress = "PRIVATE_RANGES_ONLY"
       }
 
       containers {
