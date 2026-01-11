@@ -37,11 +37,11 @@ This repository contains a full-stack, secure AI platform deployed on Google Clo
 -   *`storage`**: Buckets and lifecycle policies.
 
 ## Architecture Decisions & Rationale
-1. **Authentication: Google Identity (IAP) vs. Firebase**
-   I explicitly chose **Identity-Aware Proxy (IAP)** over Firebase Authentication for this enterprise architecture.
-   *   **Zero-Code Auth:** IAP handles the entire login flow (OIDC, 2FA, session management) at the infrastructure level (Load Balancer) before the request ever reaches the container. This eliminates the need for complex auth logic in the application code.
-   *   **Zero Trust:** It enforces a "Zero Trust" model where access is granted based on identity and context at the edge, rather than just at the application level.
-   *   **Enterprise Integration:** It integrates seamlessly with Google Workspace identities, making it ideal for internal enterprise tools.
+1. **Authentication: Firebase Authentication vs. Google Identity (IAP)**
+   I explicitly chose **Firebase Authentication** over Identity-Aware Proxy (IAP) for this architecture.
+   *   **Seamless Frontend Integration:** Firebase provides a rich, client-side SDK that integrates natively with the Next.js application, offering a smoother, customizable user experience (login pages, social providers) compared to IAP's rigid, infrastructure-level interception.
+   *   **Public-Facing Scalability:** Unlike IAP, which is optimized for internal enterprise tools (Google Workspace identities), Firebase Authentication is designed for consumer-scale applications (B2C), supporting millions of users with a generous free tier and ease of external sign-ups.
+   *   **Developer Experience:** It allows for rapid prototyping and deployment without complex load balancer configurations, while still maintaining high security standards through JWT verification on the backend using the Firebase Admin SDK.
 2. **Communication: Asyncio vs. Pub/Sub**
    While Pub/Sub is excellent for decoupled, asynchronous background tasks, I utilize **Python's asyncio** within FastAPI for the chat interface.
    *   **Real-Time Requirement:** Chat users expect immediate, streaming responses. Pub/Sub is a "fire-and-forget" mechanism designed for background processing, not for maintaining the open, bidirectional HTTP connections required for streaming LLM tokens to a user in real-time.
@@ -424,109 +424,63 @@ npx playwright test                                                             
 
 # Deployment Guide: From Zero to Production
 
-This guide assumes you have a Google Cloud Project and the necessary CLI tools installed (`gcloud`, `terraform`, `docker`, `npm`, `python`).
+This guide outlines the step-by-step process to deploy your AI Platform to Google Cloud.
 
-## Phase 1: Pre-Terraform Setup (Manual Actions)
+**Core Concept:** Your infrastructure (Terraform) creates the "shell" services first (using a placeholder image). Then, your CI/CD pipelines (Cloud Build) build the actual code and "fill" those shells with your application.
 
-### Step 1: Google Cloud Project Setup
-1.  **Create/Select a Project:**
-    ```bash
-    gcloud auth login
-    gcloud config set project [YOUR_PROJECT_ID]
-    gcloud config set compute/region us-central1
-    ```
-2.  **Link Billing:** Ensure your project is linked to a Billing Account.
-3.  **Enable APIs:**
-    ```bash
-    gcloud services enable \
-      compute.googleapis.com \
-      iam.googleapis.com \
-      run.googleapis.com \
-      artifactregistry.googleapis.com \
-      cloudbuild.googleapis.com \
-      secretmanager.googleapis.com \
-      sqladmin.googleapis.com \
-      firestore.googleapis.com \
-      dlp.googleapis.com \
-      aiplatform.googleapis.com \
-      redis.googleapis.com \
-      cloudfunctions.googleapis.com \
-      storage.googleapis.com
-    ```
+## Prerequisites
 
-### Step 2: GitHub Connection (Critical)
+Before starting, ensure you have the following CLI tools installed: `gcloud`, `terraform`, `docker`, `npm`, `python`.
+
+### 1. Google Cloud Project
+
+Ensure you have a GCP project with billing enabled.
+
+```bash
+gcloud auth login
+gcloud config set project [YOUR_PROJECT_ID]
+gcloud config set compute/region us-central1
+```
+
+### 2. Firebase Project
+
+1. Go to the [Firebase Console](https://console.firebase.google.com/).
+2. Add a new project and select your *existing* Google Cloud Project.
+3. Enable **Authentication** (Google Provider, Email/Password, etc.).
+4. Enable **Firestore** (Create Database → Native Mode → Select same region as your GCP resources, e.g., `us-central1`).
+5. Go to **Project Settings** → **General** → **Your apps** → **Add app** (Web).
+6. **Copy the Firebase Config SDK values** (apiKey, authDomain, projectId, storageBucket, messagingSenderId, appId). You will need these later.
+
+### 3. Enable APIs
+
+```bash
+gcloud services enable \
+  compute.googleapis.com \
+  iam.googleapis.com \
+  run.googleapis.com \
+  artifactregistry.googleapis.com \
+  cloudbuild.googleapis.com \
+  secretmanager.googleapis.com \
+  sqladmin.googleapis.com \
+  firestore.googleapis.com \
+  dlp.googleapis.com \
+  aiplatform.googleapis.com \
+  redis.googleapis.com \
+  cloudfunctions.googleapis.com \
+  storage.googleapis.com
+```
+
+### 4. GitHub Connection (Critical)
+
 Terraform creates Cloud Build triggers that watch your repo. You **must** connect your repository to Google Cloud Build manually before running Terraform.
 
-1.  Go to the [Cloud Build Triggers page](https://console.cloud.google.com/cloud-build/triggers).
-2.  Click **Manage Repositories** -> **Connect Repository**.
-3.  Select **GitHub** and follow the authorization flow.
-4.  Select the repository containing this code.
+1. Go to the [Cloud Build Triggers page](https://console.cloud.google.com/cloud-build/triggers).
+2. Click **Manage Repositories** → **Connect Repository**.
+3. Select **GitHub** and follow the authorization flow.
+4. Select the repository containing this code.
 
-# Cloud Build Trigger Setup for Frontend
+### 5. Grant IAM Permissions
 
-To deploy the frontend successfully, you must create a Cloud Build trigger that passes your Firebase configuration as substitution variables. This is required because Next.js embeds `NEXT_PUBLIC_` variables into the application at **build time**, not runtime.
-
-## Required Substitutions
-
-When creating the trigger, you must add the following **User-defined substitutions** with your actual Firebase project values:
-
-| Variable Name | Description |
-| :--- | :--- |
-| `_NEXT_PUBLIC_FIREBASE_API_KEY` | Your Firebase API Key |
-| `_NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | Your Firebase Auth Domain (e.g., `project.firebaseapp.com`) |
-| `_NEXT_PUBLIC_FIREBASE_PROJECT_ID` | Your Firebase Project ID |
-| `_NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` | Your Firebase Storage Bucket (e.g., `project.appspot.com`) |
-| `_NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | Your Firebase Messaging Sender ID |
-| `_NEXT_PUBLIC_FIREBASE_APP_ID` | Your Firebase App ID |
-
-## Setup Instructions (Google Cloud Console)
-
-1.  Go to **Cloud Build** > **Triggers** in the Google Cloud Console.
-2.  Click **Create Trigger**.
-3.  **Name**: Give it a name like `frontend-deploy`.
-4.  **Event**: Select **Push to a branch**.
-5.  **Source**: Select your repository and the branch (e.g., `^main$`).
-6.  **Configuration**: Select **Cloud Build configuration file (yaml or json)**.
-7.  **Location**: Enter `cloudbuild-frontend.yaml`.
-8.  Scroll down to **Advanced** > **Substitution variables**.
-9.  Click **Add Variable** for each of the variables listed above and paste your actual values.
-10. Click **Create**.
-
-## Security Note
-
-Since these variables are prefixed with `NEXT_PUBLIC_`, Next.js will bundle them into the client-side JavaScript code. They are safe to be exposed to the browser (as they are required for the Firebase client SDK to work), but you should ensure your Firebase Security Rules are configured correctly to secure your data.
-
----
-
-# Cloud Build Trigger Setup for Backend
-
-The backend deployment is simpler because environment variables are injected at **runtime** (via Cloud Run configuration), not build time.
-
-## Setup Instructions (Google Cloud Console)
-
-1.  Go to **Cloud Build** > **Triggers**.
-2.  Click **Create Trigger**.
-3.  **Name**: `backend-deploy`.
-4.  **Event**: Select **Push to a branch**.
-5.  **Source**: Select your repository and branch (e.g., `^main$`).
-6.  **Configuration**: Select **Cloud Build configuration file (yaml or json)**.
-7.  **Location**: Enter `cloudbuild-backend.yaml`.
-8.  **Ignored Files** (Optional but Recommended): Add `frontend-nextjs/**` to prevent backend builds when only frontend code changes.
-9.  Click **Create**.
-
-## Important: Runtime Configuration
-
-Unlike the frontend, the backend secrets (like DB passwords) are **NOT** set in the trigger. You must set them on the Cloud Run service itself:
-
-1.  Go to **Cloud Run**.
-2.  Select the `backend-agent` service.
-3.  Click **Edit & Deploy New Revision**.
-4.  Go to the **Variables & Secrets** tab.
-5.  Add the required environment variables (see `backend-agent/config.py` for the list, e.g., `DB_HOST`, `DB_PASSWORD`, `STRIPE_API_KEY`).
-6.  Click **Deploy**.
-
-
-### Step 3: Grant IAM Permissions
 Terraform needs permission to manage IAM policies, and Cloud Build needs permission to deploy.
 
 ```bash
@@ -545,171 +499,461 @@ gcloud projects add-iam-policy-binding $(gcloud config get-value project) \
   --member="serviceAccount:${PROJECT_NUMBER}@cloudbuild.gserviceaccount.com" \
   --role="roles/artifactregistry.writer"
 
-# Grant Cloud Build Service Account permissions to deploy to Cloud Run
 gcloud projects add-iam-policy-binding $(gcloud config get-value project) \
   --member="serviceAccount:${PROJECT_NUMBER}@cloudbuild.gserviceaccount.com" \
   --role="roles/run.developer"
 
-# Grant Cloud Build Service Account permission to act as other service accounts (required for Cloud Run deploy)
 gcloud projects add-iam-policy-binding $(gcloud config get-value project) \
   --member="serviceAccount:${PROJECT_NUMBER}@cloudbuild.gserviceaccount.com" \
   --role="roles/iam.serviceAccountUser"
 ```
-To deploy manually, run:
+
+---
+
+## Phase 1: Infrastructure Deployment (Terraform)
+
+This step sets up the VPC, Database, Artifact Registry, Cloud Build Triggers, and the initial "Hello World" Cloud Run services.
+
+### Step 1: Create `terraform.tfvars`
+
+Navigate to the terraform directory and create a `terraform.tfvars` file:
+
+```bash
+cd terraform
+```
+
+```hcl
+project_id         = "your-project-id"
+region             = "us-central1"
+domain_name        = "ai.your-domain.com"
+github_owner       = "your-github-username"
+github_repo_name   = "your-repo-name"
+billing_account    = "000000-000000-000000"
+notification_email = "admin@example.com"
+```
+
+### Step 2: Run Terraform
+
+```bash
+terraform init
+terraform validate
+terraform plan
+terraform apply
+```
+
+Type `yes` when prompted. This process will take 15-20 minutes.
+
+**What gets created:**
+
+- VPC Network & Serverless Access
+- Cloud SQL (PostgreSQL) & Redis
+- Cloud Run Services (Frontend & Backend) with placeholder images
+- Cloud Function (PDF Ingest)
+- Cloud Build Triggers
+- Secret Manager placeholders
+
+---
+
+## Phase 2: Configure CI/CD Triggers
+
+The Frontend build requires your Firebase keys to be "baked" into the Docker image at build time.
+
+### Frontend Trigger Configuration
+
+1. Go to **Google Cloud Console** → **Cloud Build** → **Triggers**.
+2. Locate the `frontend-nextjs-trigger` and click **Edit**.
+3. Scroll down to **Substitution variables**.
+4. Add the following variables using the Firebase values from Prerequisites:
+
+| Variable Name | Description |
+| :--- | :--- |
+| `_NEXT_PUBLIC_FIREBASE_API_KEY` | Your Firebase API Key |
+| `_NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | Your Firebase Auth Domain (e.g., `project.firebaseapp.com`) |
+| `_NEXT_PUBLIC_FIREBASE_PROJECT_ID` | Your Firebase Project ID |
+| `_NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` | Your Firebase Storage Bucket (e.g., `project.appspot.com`) |
+| `_NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | Your Firebase Messaging Sender ID |
+| `_NEXT_PUBLIC_FIREBASE_APP_ID` | Your Firebase App ID |
+
+5. Click **Save**.
+
+**Security Note:** Since these variables are prefixed with `NEXT_PUBLIC_`, Next.js will bundle them into the client-side JavaScript code. They are safe to be exposed to the browser (as they are required for the Firebase client SDK to work), but ensure your Firebase Security Rules are configured correctly.
+
+### Backend Trigger Configuration
+
+The backend deployment is simpler because environment variables are injected at **runtime** via Cloud Run, not build time.
+
+1. Go to **Cloud Build** → **Triggers**.
+2. Click **Create Trigger** (or edit the existing `backend-agent-trigger`).
+3. Configure with:
+   - **Name**: `backend-deploy`
+   - **Event**: Push to a branch
+   - **Source**: Your repository and branch (e.g., `^main$`)
+   - **Configuration**: Cloud Build configuration file
+   - **Location**: `cloudbuild-backend.yaml`
+   - **Ignored Files** (Optional): `frontend-nextjs/**`
+4. Click **Save/Create**.
+
+---
+
+## Phase 3: Configure Secrets
+
+Terraform created the *containers* for your secrets, but you need to add the *values*.
+
+### Stripe Keys
+
+1. Find the secret `STRIPE_SECRET_KEY` in Secret Manager and add a new version with your Stripe **Secret Key**.
+2. Find the secret `STRIPE_PUBLISHABLE_KEY` and add your Stripe **Publishable Key**.
+
+### Additional Required Secrets
+
+Create these secrets manually:
+
+```bash
+# Stripe Webhook Secret (from Stripe Dashboard)
+gcloud secrets create STRIPE_WEBHOOK_SECRET --replication-policy="automatic"
+echo -n "whsec_..." | gcloud secrets versions add STRIPE_WEBHOOK_SECRET --data-file=-
+
+# Google API Key (Optional, if not using ADC)
+gcloud secrets create GOOGLE_API_KEY --replication-policy="automatic"
+echo -n "AIzaSy..." | gcloud secrets versions add GOOGLE_API_KEY --data-file=-
+
+# DB_HOST (use the IP address output by Terraform)
+gcloud secrets create DB_HOST --replication-policy="automatic"
+echo -n "10.x.x.x" | gcloud secrets versions add DB_HOST --data-file=-
+```
+
+---
+
+## Phase 4: Build and Deploy Applications
+
+Now that the infrastructure and triggers are configured, you can build the actual applications.
+
+### Option A: Manual Trigger
+
+In the Cloud Build Triggers page:
+
+1. Click **Run** on `backend-agent-trigger`.
+2. Click **Run** on `frontend-nextjs-trigger`.
+
+### Option B: Git Push
+
+Push a commit to your `main` branch to automatically fire both triggers:
+
+```bash
+git add .
+git commit -m "Deploy applications"
+git push origin main
+```
+
+**What happens:** Cloud Build builds the Docker images, pushes them to Artifact Registry, and updates the Cloud Run services with your actual application code.
+
+### Manual Build Commands
+
+If needed, you can also run builds directly:
 
 ```bash
 gcloud builds submit --config cloudbuild-backend.yaml .
 gcloud builds submit --config cloudbuild-frontend.yaml .
 ```
 
-## Phase 2: Terraform Configuration
+---
 
-### Step 4: Create `terraform.tfvars`
-Create a file named `terraform/terraform.tfvars` and populate it with your specific configuration.
+## Phase 5: Database Initialization
 
-```hcl
-project_id         = "your-project-id"
-region             = "us-central1"
-domain_name        = "ai.your-domain.com"  # The domain you will use for the frontend
-github_owner       = "your-github-username"
-github_repo_name   = "your-repo-name"
-billing_account    = "000000-000000-000000" # Your Billing Account ID
-notification_email = "admin@example.com"    # For budget alerts
-```
+Your Cloud SQL database is running but empty.
 
-## Phase 3: Infrastructure Deployment
+### Step 1: Connect to Cloud SQL
 
-### Step 5: Run Terraform
+The easiest way is to use the Cloud SQL Auth Proxy from Cloud Shell:
+
 ```bash
-cd terraform
-terraform init
-terraform validate
-terraform plan
-terraform apply
+# Download proxy
+curl -o cloud-sql-proxy https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.8.0/cloud-sql-proxy.linux.amd64
+chmod +x cloud-sql-proxy
+
+# Start proxy (replace INSTANCE_CONNECTION_NAME from SQL Console)
+./cloud-sql-proxy --address 0.0.0.0 --port 5432 INSTANCE_CONNECTION_NAME &
 ```
-*Type `yes` when prompted.*
 
-This process will take 15-20 minutes. It creates:
-*   VPC Network & Serverless Access
-*   Cloud SQL (PostgreSQL) & Redis
-*   Cloud Run Services (Frontend & Backend)
-*   Cloud Function (PDF Ingest)
-*   Secret Manager placeholders
+### Step 2: Get the Password
 
-### Step 6: Configure Secrets
-Terraform created the *containers* for your secrets, but you need to add the *values*.
+Go to **Secret Manager** → `[project-id]-cloudsql-password` → **View Secret Value**.
 
-1.  **Stripe Keys:**
-    *   Find the secret `STRIPE_SECRET_KEY` in Secret Manager and add a new version with your Stripe **Secret Key**.
-    *   Find the secret `STRIPE_PUBLISHABLE_KEY` and add your Stripe **Publishable Key**.
+### Step 3: Enable pgvector and Run Init Script
 
-2.  **Missing Secrets (Manual Creation):**
-    Due to backend configuration requirements, you must manually create the following secrets:
-    ```bash
-    # Create Stripe Webhook Secret (from Stripe Dashboard)
-    gcloud secrets create STRIPE_WEBHOOK_SECRET --replication-policy="automatic"
-    echo -n "whsec_..." | gcloud secrets versions add STRIPE_WEBHOOK_SECRET --data-file=-
+```bash
+psql "host=127.0.0.1 port=5432 sslmode=disable user=postgres dbname=postgres" -f init-db.sql
+```
 
-    # Create Google API Key (Optional, if not using ADC)
-    gcloud secrets create GOOGLE_API_KEY --replication-policy="automatic"
-    echo -n "AIzaSy..." | gcloud secrets versions add GOOGLE_API_KEY --data-file=-
+Within the database, enable the vector extension:
 
-    # Create DB_HOST secret (Required by current backend config)
-    # Use the IP address output by Terraform (module.database.instance_ip)
-    gcloud secrets create DB_HOST --replication-policy="automatic"
-    echo -n "10.x.x.x" | gcloud secrets versions add DB_HOST --data-file=-
-    ```
+```sql
+CREATE EXTENSION IF NOT EXISTS vector;
+```
 
-## Phase 4: Application Deployment
+---
 
-### Step 7: Finalize Database Setup
-1.  **Enable pgvector:**
-    Connect to your new Cloud SQL instance (via Cloud Shell or a Jump Host) and run:
-    ```sql
-    CREATE EXTENSION IF NOT EXISTS vector;
-    ```
-    *Note: The password for the `postgres` user is in the Secret Manager under `[project-id]-cloudsql-password`.*
+## Phase 6: Configure Backend Runtime
 
-### Step 8: Deploy Code
-Terraform deployed "Hello World" placeholders. Now, push your code to deploy the actual apps.
+Unlike the frontend, backend secrets are set on the Cloud Run service itself:
 
-1.  **Trigger Cloud Build:**
-    ```bash
-    # Deploy Backend
-    gcloud builds submit --config cloudbuild-backend.yaml .
+1. Go to **Cloud Run**.
+2. Select the `backend-agent` service.
+3. Click **Edit & Deploy New Revision**.
+4. Go to the **Variables & Secrets** tab.
+5. Add the required environment variables (see `backend-agent/config.py` for the list, e.g., `DB_HOST`, `DB_PASSWORD`, `STRIPE_API_KEY`).
+6. Click **Deploy**.
 
-    # Deploy Frontend
-    gcloud builds submit --config cloudbuild-frontend.yaml .
-    ```
+---
 
-### Step 9: DNS Setup
-1.  Get the Load Balancer IP:
-    ```bash
-    cd terraform && terraform output public_ip
-    ```
-2.  Update your DNS provider (e.g., GoDaddy, Cloudflare) to point your domain (e.g., `ai.your-domain.com`) to this IP.
-3.  Wait 15-30 minutes for the managed SSL certificate to provision.
+## Phase 7: DNS Setup
+
+1. Get the Load Balancer IP:
+
+```bash
+cd terraform && terraform output public_ip
+```
+
+2. Update your DNS provider (e.g., GoDaddy, Cloudflare) to point your domain (e.g., `ai.your-domain.com`) to this IP.
+
+3. Wait 15-30 minutes for the managed SSL certificate to provision.
+
+---
+
+## Verification
+
+1. Go to **Cloud Run** in the Console.
+2. Click on the `frontend-agent` service.
+3. Click the **URL** provided at the top.
+4. You should see your Next.js application (not the Hello World page).
+
+---
+
+# Detailed Cost Breakdown by Module
+
+## 1. Module: `billing_monitoring`
+
+* **What is deployed:**
+* **Budget:** A budget alert for $100 (alerts you at 50%, 90%, 100%).
+* **Monitoring:** Custom metric for error counts and an alert policy for high error rates.
+* **Notification:** Email channel.
+
+
+* **Cost:** **~$0.00 / month**.
+* Google Cloud Budgets and standard Alerting are generally free.
+* Custom metrics can incur costs if you send millions of data points, but for this scale, it's negligible.
+
+
+
+## 2. Module: `cicd`
+
+* **What is deployed:**
+* **Artifact Registry:** A Docker repository (`cloud-run-source-deploy`).
+* **Cloud Build:** 2 Triggers (Frontend & Backend) connected to GitHub.
+
+
+* **Cost:** **Pay-as-you-go (Low)**.
+* **Builds:** You get 120 free build-minutes/day. Unless you commit code constantly, this is likely free.
+* **Storage:** Artifact Registry charges ~$0.020 per GB/month for storing your Docker images.
+
+
+
+## 3. Module: `compute` (Significant Cost)
+
+* **What is deployed:**
+* **Cloud Run Job:** `ingest-job` (Runs only when triggered).
+* **Cloud Run Service:** `backend-agent` (2 vCPU, 4GB RAM).
+* **Cloud Run Service:** `frontend-agent` (1 vCPU, 2GB RAM).
+
+
+* **The "Hidden" Cost:**
+* Both services have `min_instance_count = 1`. This keeps one copy of your app alive 24/7.
+* **Backend Cost:** ~$40/month (Idle pricing for 2vCPU/4GB).
+* **Frontend Cost:** ~$20/month (Idle pricing for 1vCPU/2GB).
+* **Total:** **~$60/month** minimum. Costs increase if traffic spikes and scales up to `max_instance_count = 20`.
+
+
+
+## 4. Module: `database` (Significant Cost)
+
+* **What is deployed:**
+* **Cloud SQL (PostgreSQL):**
+* Tier: `db-g1-small` (Shared core).
+* Edition: Enterprise.
+* Disk: SSD (Autoscaling).
+* Backups: Enabled (7 days retention).
+
+
+* **Firestore:** Native mode database.
+
+
+* **Cost:** **~$40 - $50 / month**.
+* The SQL instance charges an hourly rate 24/7 (~$0.041/hour) plus storage costs (~$0.17/GB/month).
+* Firestore is pay-as-you-go (reads/writes) and has a generous free tier.
+
+
+
+## 5. Module: `function`
+
+* **What is deployed:**
+* **Cloud Function:** `pdf-ingest-function` (Python 3.11).
+* **Trigger:** Eventarc trigger watching a Storage Bucket for new files.
+
+
+* **Cost:** **Pay-as-you-go (Low)**.
+* You only pay when a file is uploaded and the function runs. The first 2 million invocations per month are usually free.
+
+
+
+## 6. Module: `ingress` (Moderate Cost)
+
+* **What is deployed:**
+* **Load Balancer:** Global External Application Load Balancer.
+* **SSL:** Managed Google Certificate for `app.yourdomain.com`.
+* **Cloud Armor:** Security Policy with WAF rules (SQLi, XSS, etc.) and Rate Limiting.
+
+
+* **Cost:** **~$25 - $30 / month**.
+* **Forwarding Rule:** The Load Balancer charges ~$0.025/hour (~$18/month).
+* **Cloud Armor:** ~$5/month per policy + $1/month per rule.
+* **Warning:** The plan enables `layer_7_ddos_defense_config`. Ensure you do **not** inadvertently activate "Cloud Armor Enterprise" (formerly Managed Protection Plus), which is a $3,000/month subscription. The standard pay-as-you-go version is fine, but double-check your billing console after deployment. Requires `google_compute_project_cloud_armor_tier` what we will not use here, due to costs.
+
+
+
+## 7. Module: `network` (Moderate Cost)
+
+* **What is deployed:**
+* **VPC Network:** Custom subnets.
+* **Cloud NAT:** A NAT Gateway (`your-actual-project-id-12345-nat`).
+
+
+* **Cost:** **~$32 / month** + Data Fees.
+* The NAT Gateway charges ~$0.045/hour (~$32/month) just to exist, regardless of traffic.
+* You also pay $0.045 per GB for data processing through the NAT.
+
+
+
+## 8. Module: `redis` (Significant Cost)
+
+* **What is deployed:**
+* **Memorystore for Redis:** Basic Tier, 1 GB capacity.
+
+
+* **Cost:** **~$35 / month**.
+* This is a fixed instance charged hourly (~$0.049/hour).
+
+
+
+## 9. Module: `storage`
+
+* **What is deployed:**
+* **Buckets:** `data_bucket` (with lifecycle rules) and `source_bucket`.
+
+
+* **Cost:** **Pay-as-you-go (Low)**.
+* Standard storage is ~$0.02 per GB. Unless you store Terabytes, this is negligible.
+
+---
+
+### Summary Table of Estimated Monthly "Fixed" Costs
+
+| Module | Resource | Est. Monthly Cost (Idle) |
+| --- | --- | --- |
+| **Compute** | Cloud Run (Min 1 Instance x 2 services) | ~$60.00 |
+| **Database** | Cloud SQL (db-g1-small) | ~$45.00 |
+| **Redis** | Memorystore (1GB Basic) | ~$35.00 |
+| **Network** | Cloud NAT Gateway | ~$32.00 |
+| **Ingress** | Load Balancer Rule | ~$18.00 |
+| **Ingress** | Cloud Armor Policy | ~$5.00 |
+| **TOTAL** | **Baseline "Rent"** | **~$195.00 / month** |
+
+**Recommendation:**
+To reduce costs to <$50/mo:
+
+1. **Remove `min_instance_count = 1**` in Cloud Run (Scale to zero).
+2. **Delete the Redis module** and use a local container or smaller service if possible.
+3. **Delete the NAT Gateway** if your Cloud Run services don't strictly *need* a static outgoing IP (Cloud Run has a public IP by default).
+4. **Downgrade Cloud SQL** to the `db-f1-micro` instance type (if available) or switch to **Cloud SQL Enterprise Plus** usually has higher minimums, sticking to standard `db-g1-small` is the cheapest managed option, or use **Firestore** only.
 
 ---
 
 # Disaster Recovery Plan
-This document outlines the procedures for recovering the platform's critical data stores: **Cloud SQL** (PostgreSQL) and **Firestore**.
 
-## 1. Cloud SQL (PostgreSQL) Recovery
+This section outlines the procedures for recovering critical data stores.
+
+## Cloud SQL (PostgreSQL) Recovery
+
 Our Cloud SQL instance is configured with:
+
 - **Automated Backups:** Retained for 7 days.
 - **Point-in-Time Recovery (PITR):** Allows restoration to any second within the retention window.
 - **Deletion Protection:** Prevents accidental deletion of the instance.
 
 ### Scenario A: Accidental Data Corruption (PITR)
-*Objective: Restore the database to a state before the corruption occurred (e.g., 10 minutes ago).*
 
-1.  **Identify the Timestamp:** Determine the exact UTC time just before the error occurred.
-2.  **Perform Restore (Clone):** Cloud SQL restores are performed by creating a *new* instance from the backup.
-    ```bash
-    # Example: Restore to a new instance named 'restored-db-instance'
-    gcloud sql instances clone <SOURCE_INSTANCE_ID> restored-db-instance \
-        --point-in-time "2023-10-27T13:00:00Z"
-    ```
-3.  **Verify Data:** Connect to `restored-db-instance` and verify the data integrity.
-4.  **Switch Traffic:** Update the application secrets to point to the new instance IP/Host, or promote the new instance to be the primary if using a proxy.
+Restore the database to a state before the corruption occurred:
+
+1. **Identify the Timestamp:** Determine the exact UTC time just before the error occurred.
+
+2. **Perform Restore (Clone):**
+
+```bash
+gcloud sql instances clone <SOURCE_INSTANCE_ID> restored-db-instance \
+    --point-in-time "2023-10-27T13:00:00Z"
+```
+
+3. **Verify Data:** Connect to `restored-db-instance` and verify the data integrity.
+
+4. **Switch Traffic:** Update the application secrets to point to the new instance IP/Host.
 
 ### Scenario B: Full Instance Loss (Backup Restore)
-*Objective: Restore from the last successful nightly backup.*
 
-1.  **List Backups:**
-    ```bash
-    gcloud sql backups list --instance=<INSTANCE_ID>
-    ```
-2.  **Restore:**
-    ```bash
-    gcloud sql backups restore <BACKUP_ID> --restore-instance=<TARGET_INSTANCE_ID>
-    ```
+Restore from the last successful nightly backup:
+
+1. **List Backups:**
+
+```bash
+gcloud sql backups list --instance=<INSTANCE_ID>
+```
+
+2. **Restore:**
+
+```bash
+gcloud sql backups restore <BACKUP_ID> --restore-instance=<TARGET_INSTANCE_ID>
+```
 
 ---
 
-## 2. Firestore Recovery
+## Firestore Recovery
+
 Our Firestore database is configured with a **Daily Backup Schedule** retained for 7 days.
 
 ### Restore Procedure
-1.  **List Available Backups:**
-    ```bash
-    gcloud firestore backups list --location=<REGION>
-    ```
-    *Note the `resource name` of the backup you wish to restore.*
-2.  **Restore to a New Database:**
-    Firestore does not support in-place restores. You must restore to a new database ID.
-    ```bash
-    gcloud firestore databases restore \
-        --source-backup=projects/<PROJECT_ID>/locations/<REGION>/backups/<BACKUP_ID> \
-        --destination-database=restored-firestore-db
-    ```
-3.  **Update Application:**
-    Update the backend configuration `FIRESTORE_DATABASE_ID` or similar config) to point to `restored-firestore-db`.
+
+1. **List Available Backups:**
+
+```bash
+gcloud firestore backups list --location=<REGION>
+```
+
+Note the `resource name` of the backup you wish to restore.
+
+2. **Restore to a New Database:**
+
+Firestore does not support in-place restores. You must restore to a new database ID.
+
+```bash
+gcloud firestore databases restore \
+    --source-backup=projects/<PROJECT_ID>/locations/<REGION>/backups/<BACKUP_ID> \
+    --destination-database=restored-firestore-db
+```
+
+3. **Update Application:** Update the backend configuration (`FIRESTORE_DATABASE_ID`) to point to `restored-firestore-db`.
 
 ---
 
-## 3. Post-Recovery Checklist
+## Post-Recovery Checklist
+
 - [ ] **Verify Connectivity:** Ensure backend services can connect to the restored databases.
 - [ ] **Data Integrity Check:** Run application-level smoke tests.
 - [ ] **Re-enable Backups:** Ensure the new/restored instances have backup schedules re-applied (Terraform apply might be needed).
