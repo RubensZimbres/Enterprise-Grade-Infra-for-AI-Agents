@@ -107,6 +107,12 @@ resource "google_secret_manager_secret_iam_member" "frontend_stripe_publishable_
   member    = "serviceAccount:${module.compute.frontend_sa_email}"
 }
 
+resource "google_secret_manager_secret_iam_member" "frontend_stripe_secret_key_access" {
+  secret_id = google_secret_manager_secret.stripe_secret_key.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${module.compute.frontend_sa_email}"
+}
+
 resource "google_secret_manager_secret" "stripe_webhook_secret" {
   secret_id = "STRIPE_WEBHOOK_SECRET"
   replication {

@@ -223,6 +223,24 @@ resource "google_cloud_run_v2_service" "frontend" {
         name  = "BACKEND_URL"
         value = google_cloud_run_v2_service.backend.uri
       }
+      env {
+        name = "STRIPE_PUBLISHABLE_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = "STRIPE_PUBLISHABLE_KEY"
+            version = "latest"
+          }
+        }
+      }
+      env {
+        name = "STRIPE_SECRET_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = "STRIPE_SECRET_KEY"
+            version = "latest"
+          }
+        }
+      }
     }
   }
 }
