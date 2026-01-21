@@ -1,4 +1,4 @@
-fastapi
+fastapi>=0.109.1
 uvicorn
 langchain-google-vertexai
 langchain-postgres
@@ -8,10 +8,10 @@ pgvector
 asyncpg
 psycopg[binary]
 pydantic-settings
-pypdf
+pypdf>=6.0.0
 langchain-community
 google-auth
-requests
+requests>=2.32.2
 slowapi
 redis
 langchain-redis
@@ -34,3 +34,10 @@ pytest-asyncio
 pytest-mock
 httpx
 langgraph
+
+# Security Fixes (Transitive Dependencies)
+protobuf>=4.25.8
+pyasn1>=0.6.2
+starlette>=0.40.0
+urllib3>=1.26.19
+setuptools>=70.0.0
