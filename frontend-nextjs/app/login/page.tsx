@@ -1,28 +1,33 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { signInWithPopup, GoogleAuthProvider, OAuthProvider, signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
-import { useRouter } from 'next/navigation';
+import { useState } from "react";
+import {
+  signInWithPopup,
+  GoogleAuthProvider,
+  OAuthProvider,
+  signInWithEmailAndPassword,
+} from "firebase/auth";
+import { auth } from "@/lib/firebase";
+import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
 
   const handleLogin = async (providerName: string) => {
     try {
       let provider;
-      if (providerName === 'google') {
+      if (providerName === "google") {
         provider = new GoogleAuthProvider();
-      } else if (providerName === 'microsoft') {
-        provider = new OAuthProvider('microsoft.com');
+      } else if (providerName === "microsoft") {
+        provider = new OAuthProvider("microsoft.com");
       }
 
       if (provider) {
         await signInWithPopup(auth, provider);
-        router.push('/');
+        router.push("/");
       }
     } catch (err: any) {
       setError(err.message);
@@ -33,7 +38,7 @@ export default function LoginPage() {
     e.preventDefault();
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      router.push('/');
+      router.push("/");
     } catch (err: any) {
       setError(err.message);
     }
@@ -47,18 +52,20 @@ export default function LoginPage() {
           <p className="mt-2 text-slate-400">Sign in to your account</p>
         </div>
 
-        {error && <div className="text-red-500 text-sm text-center">{error}</div>}
+        {error && (
+          <div className="text-red-500 text-sm text-center">{error}</div>
+        )}
 
         <div className="space-y-4">
           <button
-            onClick={() => handleLogin('google')}
+            onClick={() => handleLogin("google")}
             className="flex w-full items-center justify-center gap-2 rounded-md bg-white px-4 py-2 text-slate-900 hover:bg-slate-200"
           >
             Sign in with Google
           </button>
-          
+
           <button
-            onClick={() => handleLogin('microsoft')}
+            onClick={() => handleLogin("microsoft")}
             className="flex w-full items-center justify-center gap-2 rounded-md bg-[#00a4ef] px-4 py-2 text-white hover:bg-[#0078d4]"
           >
             Sign in with Microsoft
@@ -66,7 +73,9 @@ export default function LoginPage() {
         </div>
 
         <div className="relative flex items-center justify-center border-t border-slate-800 py-4">
-          <span className="absolute bg-slate-900 px-2 text-sm text-slate-500">Or continue with</span>
+          <span className="absolute bg-slate-900 px-2 text-sm text-slate-500">
+            Or continue with
+          </span>
         </div>
 
         <form onSubmit={handleEmailLogin} className="space-y-4">

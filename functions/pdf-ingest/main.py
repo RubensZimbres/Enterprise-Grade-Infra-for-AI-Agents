@@ -9,16 +9,18 @@ from google.cloud import secretmanager
 import asyncio
 from urllib.parse import quote_plus
 
+
 # Helper
 def get_secret(project_id: str, secret_id: str, version_id: str = "1") -> str:
     try:
         client = secretmanager.SecretManagerServiceClient()
         name = f"projects/{project_id}/secrets/{secret_id}/versions/{version_id}"
         response = client.access_secret_version(request={"name": name})
-        return response.payload.data.decode('UTF-8')
+        return response.payload.data.decode("UTF-8")
     except Exception as e:
         print(f"Warning: Could not fetch secret {secret_id}: {e}")
         return ""
+
 
 # Bootstrapping Variable
 PROJECT_ID = os.getenv("PROJECT_ID")
@@ -26,9 +28,19 @@ PROJECT_ID = os.getenv("PROJECT_ID")
 # Load Config & Secrets from Secret Manager
 REGION = get_secret(PROJECT_ID, "REGION") if PROJECT_ID else os.getenv("REGION")
 DB_HOST = get_secret(PROJECT_ID, "DB_HOST") if PROJECT_ID else os.getenv("DB_HOST")
-DB_USER = get_secret(PROJECT_ID, "DB_USER") if PROJECT_ID else os.getenv("DB_USER", "postgres")
-DB_NAME = get_secret(PROJECT_ID, "DB_NAME") if PROJECT_ID else os.getenv("DB_NAME", "postgres")
-DB_PASSWORD = get_secret(PROJECT_ID, "DB_PASSWORD") if PROJECT_ID else os.getenv("DB_PASSWORD")
+DB_USER = (
+    get_secret(PROJECT_ID, "DB_USER")
+    if PROJECT_ID
+    else os.getenv("DB_USER", "postgres")
+)
+DB_NAME = (
+    get_secret(PROJECT_ID, "DB_NAME")
+    if PROJECT_ID
+    else os.getenv("DB_NAME", "postgres")
+)
+DB_PASSWORD = (
+    get_secret(PROJECT_ID, "DB_PASSWORD") if PROJECT_ID else os.getenv("DB_PASSWORD")
+)
 
 # Constants
 CHUNK_SIZE = 1000
@@ -37,19 +49,19 @@ CHUNK_OVERLAP = 200
 # Global clients to reuse connection if warm
 embeddings_client = None
 
+
 def get_embeddings():
     global embeddings_client
     if not embeddings_client:
         embeddings_client = VertexAIEmbeddings(
-            model_name="textembedding-gecko@003",
-            project=PROJECT_ID,
-            location=REGION
+            model_name="textembedding-gecko@003", project=PROJECT_ID, location=REGION
         )
     return embeddings_client
 
+
 async def process_document(local_path):
     print(f"📄 Processing {local_path}...")
-    
+
     # 1. Load
     loader = PyPDFLoader(local_path)
     docs = loader.load()
@@ -59,9 +71,9 @@ async def process_document(local_path):
 
     # 2. Split
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=CHUNK_SIZE, 
+        chunk_size=CHUNK_SIZE,
         chunk_overlap=CHUNK_OVERLAP,
-        separators=["\n\n", "\n", " ", ""]
+        separators=["\n\n", "\n", " ", ""],
     )
     chunks = text_splitter.split_documents(docs)
     print(f"🧩 Split into {len(chunks)} chunks.")
@@ -69,7 +81,7 @@ async def process_document(local_path):
     # 3. Vector Store
     # Connection string
     connection_string = f"postgresql+asyncpg://{quote_plus(DB_USER)}:{quote_plus(DB_PASSWORD)}@{DB_HOST}:5432/{DB_NAME}"
-    
+
     vector_store = PGVector(
         embeddings=get_embeddings(),
         collection_name="knowledge_base",
@@ -96,7 +108,7 @@ def ingest_pdf(cloud_event):
     print(f"Received event {event_id}: {event_type} for {bucket_name}/{file_name}")
 
     # Only process PDFs
-    if not file_name.lower().endswith('.pdf'):
+    if not file_name.lower().endswith(".pdf"):
         print(f"Skipping non-PDF file: {file_name}")
         return
 
@@ -104,7 +116,7 @@ def ingest_pdf(cloud_event):
     storage_client = storage.Client()
     bucket = storage_client.bucket(bucket_name)
     blob = bucket.blob(file_name)
-    
+
     local_path = f"/tmp/{os.path.basename(file_name)}"
     blob.download_to_filename(local_path)
     print(f"Downloaded to {local_path}")

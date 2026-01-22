@@ -6,5 +6,12 @@ langchain-google-vertexai
 langchain-postgres
 asyncpg
 pgvector
-pypdf
+pypdf>=6.0.0
 google-cloud-secret-manager
+
+# Security Fixes
+protobuf>=4.25.8
+urllib3>=1.26.19
+zipp>=3.19.1
+requests>=2.32.2
+numpy>=1.22.0

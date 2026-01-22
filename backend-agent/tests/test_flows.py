@@ -4,17 +4,20 @@ from fastapi.testclient import TestClient
 from main import app
 from ingest import ingest_data
 from models import User
-from dependencies import get_current_user
+
 
 @pytest.fixture
 def client():
     return TestClient(app)
 
+
 @pytest.fixture
 def mock_db_session():
     return MagicMock()
 
+
 # --- Ingest Flow Tests ---
+
 
 @pytest.mark.asyncio
 @patch("ingest.DirectoryLoader")
@@ -57,15 +60,18 @@ async def test_ingest_flow(mock_pgvector, mock_embeddings, mock_splitter, mock_l
 
 # --- Chat Flow with Permissions Tests ---
 
+
 @patch("main.protected_graph_invoke")
 @patch("dependencies.auth.verify_id_token")
 @patch("dependencies.crud.get_user")
-def test_chat_flow_active_user(mock_get_user, mock_verify, mock_chain, client, mock_db_session):
+def test_chat_flow_active_user(
+    mock_get_user, mock_verify, mock_chain, client, mock_db_session
+):
     # 1. Setup Active User
     mock_verify.return_value = {"email": "active@example.com", "uid": "123"}
     mock_user = User(email="active@example.com", is_active=True)
     mock_get_user.return_value = mock_user
-    
+
     mock_chain.return_value = "AI Response"
 
     # 2. Make Request
@@ -75,15 +81,19 @@ def test_chat_flow_active_user(mock_get_user, mock_verify, mock_chain, client, m
     # but `crud.get_user` mock is enough if we trust the dependency injection of the session.
     # Actually, main.py uses `get_current_user` which calls `get_db`.
     # To use our mocks inside `get_current_user`, we rely on `patch` working globally.
-    
+
     response = client.post(
-        "/chat", 
+        "/chat",
         json={"session_id": "123", "message": "hello"},
-        headers={"Authorization": "Bearer valid-token", "X-Firebase-Token": "valid-token"}
+        headers={
+            "Authorization": "Bearer valid-token",
+            "X-Firebase-Token": "valid-token",
+        },
     )
-    
+
     assert response.status_code == 200
     assert response.json()["response"] == "AI Response"
+
 
 @patch("dependencies.auth.verify_id_token")
 @patch("dependencies.crud.get_user")
@@ -95,13 +105,17 @@ def test_chat_flow_inactive_user(mock_get_user, mock_verify, client):
 
     # 2. Make Request
     response = client.post(
-        "/chat", 
+        "/chat",
         json={"session_id": "123", "message": "hello"},
-        headers={"Authorization": "Bearer valid-token", "X-Firebase-Token": "valid-token"}
+        headers={
+            "Authorization": "Bearer valid-token",
+            "X-Firebase-Token": "valid-token",
+        },
     )
-    
+
     assert response.status_code == 403
     assert "Payment Required" in response.json()["detail"]
+
 
 @patch("dependencies.auth.verify_id_token")
 def test_chat_flow_invalid_token(mock_verify, client):
@@ -110,9 +124,12 @@ def test_chat_flow_invalid_token(mock_verify, client):
 
     # 2. Make Request
     response = client.post(
-        "/chat", 
+        "/chat",
         json={"session_id": "123", "message": "hello"},
-        headers={"Authorization": "Bearer invalid-token", "X-Firebase-Token": "invalid-token"}
+        headers={
+            "Authorization": "Bearer invalid-token",
+            "X-Firebase-Token": "invalid-token",
+        },
     )
-    
+
     assert response.status_code == 401

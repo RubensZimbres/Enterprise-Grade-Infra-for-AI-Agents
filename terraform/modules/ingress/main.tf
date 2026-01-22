@@ -7,7 +7,7 @@ resource "google_compute_security_policy" "security_policy" {
   # Adaptive Protection: Uses ML to detect and block L7 DDoS attacks
   adaptive_protection_config {
     layer_7_ddos_defense_config {
-      enable = true
+      enable          = true
       rule_visibility = "STANDARD"
     }
   }
@@ -140,9 +140,9 @@ resource "google_compute_region_network_endpoint_group" "serverless_neg" {
 
 # --- 4. The Backend Service (Router + CDN + Armor) ---
 resource "google_compute_backend_service" "default" {
-  name      = "${var.project_id}-backend-service"
-  protocol  = "HTTP" # Cloud Run talks HTTP internally
-  port_name = "http"
+  name        = "${var.project_id}-backend-service"
+  protocol    = "HTTP" # Cloud Run talks HTTP internally
+  port_name   = "http"
   timeout_sec = 300
 
   # Attach Cloud Armor
@@ -151,17 +151,17 @@ resource "google_compute_backend_service" "default" {
   # Enable Cloud CDN (As per your diagram)
   enable_cdn = true
   cdn_policy {
-    cache_mode                   = "CACHE_ALL_STATIC"
-    client_ttl                   = 3600
-    default_ttl                  = 3600
-    max_ttl                      = 86400
-    negative_caching             = true
-    serve_while_stale            = 86400
+    cache_mode        = "CACHE_ALL_STATIC"
+    client_ttl        = 3600
+    default_ttl       = 3600
+    max_ttl           = 86400
+    negative_caching  = true
+    serve_while_stale = 86400
 
     cache_key_policy {
-      include_host           = true
-      include_protocol       = true
-      include_query_string   = true
+      include_host         = true
+      include_protocol     = true
+      include_query_string = true
     }
   }
 

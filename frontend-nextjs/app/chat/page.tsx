@@ -1,5 +1,5 @@
-import React from 'react';
-import ChatInterface from './ChatInterface';
+import React from "react";
+import ChatInterface from "./ChatInterface";
 
 export default function ChatPage() {
   // Authentication is handled by the parent layout/AuthProvider

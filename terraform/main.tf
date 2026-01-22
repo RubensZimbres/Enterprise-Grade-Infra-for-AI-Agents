@@ -5,8 +5,8 @@
 module "network" {
   source = "./modules/network"
 
-  project_id  = var.project_id  # CHANGED from local.project_id
-  region      = var.region      # CHANGED from local.region
+  project_id  = var.project_id # CHANGED from local.project_id
+  region      = var.region     # CHANGED from local.region
   subnet_cidr = "10.0.0.0/24"
 }
 
@@ -107,6 +107,32 @@ resource "google_secret_manager_secret_iam_member" "frontend_stripe_publishable_
   member    = "serviceAccount:${module.compute.frontend_sa_email}"
 }
 
+resource "google_secret_manager_secret_iam_member" "frontend_stripe_secret_key_access" {
+  secret_id = google_secret_manager_secret.stripe_secret_key.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${module.compute.frontend_sa_email}"
+}
+
+resource "google_secret_manager_secret" "stripe_webhook_secret" {
+  secret_id = "STRIPE_WEBHOOK_SECRET"
+  replication {
+    auto {}
+  }
+}
+
+# Allow Backend to access Stripe Secrets
+resource "google_secret_manager_secret_iam_member" "backend_stripe_secret_key_access" {
+  secret_id = google_secret_manager_secret.stripe_secret_key.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${module.compute.backend_sa_email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "backend_stripe_webhook_secret_access" {
+  secret_id = google_secret_manager_secret.stripe_webhook_secret.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${module.compute.backend_sa_email}"
+}
+
 # Redis Password Secret
 resource "google_secret_manager_secret" "redis_password" {
   secret_id = "REDIS_PASSWORD"
@@ -134,4 +160,3 @@ module "cicd" {
   github_owner     = var.github_owner
   github_repo_name = var.github_repo_name
 }
-

@@ -11,8 +11,8 @@ resource "google_storage_bucket_object" "zip" {
   content_type = "application/zip"
 
   # Append MD5 to force update on change
-  name         = "src-${data.archive_file.source.output_md5}.zip"
-  bucket       = var.source_bucket_name
+  name   = "src-${data.archive_file.source.output_md5}.zip"
+  bucket = var.source_bucket_name
 }
 
 # Service Account for the Function
@@ -48,7 +48,7 @@ resource "google_cloudfunctions2_function" "function" {
 
   build_config {
     runtime     = "python311"
-    entry_point = "ingest_pdf"  # Matches main.py
+    entry_point = "ingest_pdf" # Matches main.py
     source {
       storage_source {
         bucket = var.source_bucket_name
@@ -58,11 +58,11 @@ resource "google_cloudfunctions2_function" "function" {
   }
 
   service_config {
-    max_instance_count = 10
-    available_memory   = "512M"
-    timeout_seconds    = 300
+    max_instance_count    = 10
+    available_memory      = "512M"
+    timeout_seconds       = 300
     service_account_email = google_service_account.function_sa.email
-    
+
     environment_variables = {
       PROJECT_ID = var.project_id
       REGION     = var.region
@@ -80,9 +80,9 @@ resource "google_cloudfunctions2_function" "function" {
   }
 
   event_trigger {
-    trigger_region = var.region
-    event_type     = "google.cloud.storage.object.v1.finalized"
-    retry_policy   = "RETRY_POLICY_RETRY"
+    trigger_region        = var.region
+    event_type            = "google.cloud.storage.object.v1.finalized"
+    retry_policy          = "RETRY_POLICY_RETRY"
     service_account_email = google_service_account.function_sa.email
     event_filters {
       attribute = "bucket"

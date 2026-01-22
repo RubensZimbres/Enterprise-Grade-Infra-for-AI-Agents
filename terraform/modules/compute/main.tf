@@ -74,7 +74,7 @@ resource "google_cloud_run_v2_service" "backend" {
       max_instance_count = 20
     }
 
-    vpc_access{
+    vpc_access {
       network_interfaces {
         network    = var.vpc_name
         subnetwork = var.subnet_name
@@ -124,9 +124,9 @@ resource "google_cloud_run_v2_service" "backend" {
         value = var.region
       }
       env {
-          name  = "DB_USER"
-          value = "postgres"
-        }
+        name  = "DB_USER"
+        value = "postgres"
+      }
       env {
         name  = "DB_NAME"
         value = "postgres"
@@ -147,6 +147,37 @@ resource "google_cloud_run_v2_service" "backend" {
       env {
         name  = "REDIS_HOST"
         value = var.redis_host
+      }
+      env {
+        name = "REDIS_PASSWORD"
+        value_source {
+          secret_key_ref {
+            secret  = "REDIS_PASSWORD"
+            version = "latest"
+          }
+        }
+      }
+      env {
+        name = "STRIPE_API_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = "STRIPE_SECRET_KEY"
+            version = "latest"
+          }
+        }
+      }
+      env {
+        name = "STRIPE_WEBHOOK_SECRET"
+        value_source {
+          secret_key_ref {
+            secret  = "STRIPE_WEBHOOK_SECRET"
+            version = "latest"
+          }
+        }
+      }
+      env {
+        name  = "FIRESTORE_COLLECTION"
+        value = "chat_history"
       }
       # FRONTEND_URL removed to avoid circular dependency (Cycle: backend -> frontend -> backend)
       # If needed for CORS, consider using a wildcard or updating after creation.
@@ -170,7 +201,7 @@ resource "google_cloud_run_v2_service" "frontend" {
       max_instance_count = 20
     }
 
-    vpc_access{
+    vpc_access {
       network_interfaces {
         network    = var.vpc_name
         subnetwork = var.subnet_name
@@ -191,6 +222,24 @@ resource "google_cloud_run_v2_service" "frontend" {
       env {
         name  = "BACKEND_URL"
         value = google_cloud_run_v2_service.backend.uri
+      }
+      env {
+        name = "STRIPE_PUBLISHABLE_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = "STRIPE_PUBLISHABLE_KEY"
+            version = "latest"
+          }
+        }
+      }
+      env {
+        name = "STRIPE_SECRET_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = "STRIPE_SECRET_KEY"
+            version = "latest"
+          }
+        }
       }
     }
   }
@@ -224,9 +273,9 @@ resource "google_cloud_run_v2_job" "ingest_job" {
   template {
     template {
       service_account = google_service_account.backend_sa.email
-      timeout = "600s"
+      timeout         = "600s"
 
-      vpc_access{
+      vpc_access {
         network_interfaces {
           network    = var.vpc_name
           subnetwork = var.subnet_name
@@ -255,9 +304,9 @@ resource "google_cloud_run_v2_job" "ingest_job" {
           value = var.region
         }
         env {
-            name  = "DB_USER"
-            value = "postgres"
-          }
+          name  = "DB_USER"
+          value = "postgres"
+        }
         env {
           name  = "DB_NAME"
           value = "postgres"

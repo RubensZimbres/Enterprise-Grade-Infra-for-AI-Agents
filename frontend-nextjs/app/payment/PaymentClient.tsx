@@ -1,12 +1,12 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
-import { loadStripe } from '@stripe/stripe-js';
+import React, { useState, useEffect } from "react";
+import { loadStripe } from "@stripe/stripe-js";
 import {
   EmbeddedCheckoutProvider,
-  EmbeddedCheckout
-} from '@stripe/react-stripe-js';
-import { Loader2, AlertCircle } from 'lucide-react';
+  EmbeddedCheckout,
+} from "@stripe/react-stripe-js";
+import { Loader2, AlertCircle } from "lucide-react";
 
 interface PaymentClientProps {
   publishableKey: string;
@@ -14,7 +14,7 @@ interface PaymentClientProps {
 
 export default function PaymentClient({ publishableKey }: PaymentClientProps) {
   const [stripePromise] = useState(() => loadStripe(publishableKey));
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState("");
   const [step, setStep] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -24,17 +24,17 @@ export default function PaymentClient({ publishableKey }: PaymentClientProps) {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetch('/api/create-checkout-session', {
-        method: 'POST',
+      const response = await fetch("/api/create-checkout-session", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({ email }),
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to create checkout session');
+        throw new Error(errorData.error || "Failed to create checkout session");
       }
 
       const data = await response.json();
@@ -51,7 +51,7 @@ export default function PaymentClient({ publishableKey }: PaymentClientProps) {
   const handleEmailSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) {
-      setError('Email is required');
+      setError("Email is required");
       return;
     }
     fetchClientSecret();
@@ -61,15 +61,35 @@ export default function PaymentClient({ publishableKey }: PaymentClientProps) {
     <div className="w-full max-w-2xl mx-auto">
       {/* Step Indicator */}
       <div className="flex justify-center mb-8">
-        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${step >= 1 ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400'}`}>1</div>
-        <div className={`w-12 h-1 mt-3.5 mx-2 ${step >= 2 ? 'bg-blue-600' : 'bg-slate-800'}`}></div>
-        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${step >= 2 ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400'}`}>2</div>
+        <div
+          className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${
+            step >= 1 ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-400"
+          }`}
+        >
+          1
+        </div>
+        <div
+          className={`w-12 h-1 mt-3.5 mx-2 ${
+            step >= 2 ? "bg-blue-600" : "bg-slate-800"
+          }`}
+        ></div>
+        <div
+          className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${
+            step >= 2 ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-400"
+          }`}
+        >
+          2
+        </div>
       </div>
 
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 md:p-8 shadow-xl">
         <div className="mb-6 text-center">
-          <h2 className="text-2xl font-bold text-white mb-2">Payment Details</h2>
-          <p className="text-slate-400">Total: <span className="text-white font-semibold">$36.00 USD</span></p>
+          <h2 className="text-2xl font-bold text-white mb-2">
+            Payment Details
+          </h2>
+          <p className="text-slate-400">
+            Total: <span className="text-white font-semibold">$36.00 USD</span>
+          </p>
         </div>
 
         {error && (
@@ -82,7 +102,10 @@ export default function PaymentClient({ publishableKey }: PaymentClientProps) {
         {step === 1 && (
           <form onSubmit={handleEmailSubmit} className="space-y-6">
             <div className="space-y-2">
-              <label htmlFor="email" className="block text-sm font-medium text-slate-300">
+              <label
+                htmlFor="email"
+                className="block text-sm font-medium text-slate-300"
+              >
                 Email Address <span className="text-red-500">*</span>
               </label>
               <input
@@ -94,7 +117,9 @@ export default function PaymentClient({ publishableKey }: PaymentClientProps) {
                 placeholder="you@example.com"
                 required
               />
-              <p className="text-xs text-slate-500">Your data will not be shared.</p>
+              <p className="text-xs text-slate-500">
+                Your data will not be shared.
+              </p>
             </div>
 
             <button
@@ -108,7 +133,7 @@ export default function PaymentClient({ publishableKey }: PaymentClientProps) {
                   Processing...
                 </>
               ) : (
-                'Pay with Card'
+                "Pay with Card"
               )}
             </button>
           </form>

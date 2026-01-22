@@ -1,10 +1,10 @@
-import '@testing-library/jest-dom'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import ChatPage from '../app/chat/page'
-import { auth } from '@/lib/firebase'
+import "@testing-library/jest-dom";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import ChatPage from "../app/chat/page";
+import { auth } from "@/lib/firebase";
 
 // Mock Firebase Auth
-jest.mock('@/lib/firebase', () => ({
+jest.mock("@/lib/firebase", () => ({
   auth: {
     currentUser: {
       getIdToken: jest.fn(),
@@ -13,7 +13,7 @@ jest.mock('@/lib/firebase', () => ({
 }));
 
 // Mock Next Navigation
-jest.mock('next/navigation', () => ({
+jest.mock("next/navigation", () => ({
   useRouter: () => ({
     push: jest.fn(),
   }),
@@ -22,7 +22,7 @@ jest.mock('next/navigation', () => ({
 // Mock fetch
 global.fetch = jest.fn();
 
-describe('ChatPage', () => {
+describe("ChatPage", () => {
   const mockScrollIntoView = jest.fn();
 
   beforeAll(() => {
@@ -31,24 +31,28 @@ describe('ChatPage', () => {
     // Mock TextDecoder
     global.TextDecoder = class {
       decode(chunk: any) {
-        return chunk ? String.fromCharCode(...chunk) : '';
+        return chunk ? String.fromCharCode(...chunk) : "";
       }
     } as any;
   });
 
   beforeEach(() => {
     jest.clearAllMocks();
-    jest.spyOn(console, 'error').mockImplementation(() => {});
-    (auth.currentUser?.getIdToken as jest.Mock).mockResolvedValue('mock-token');
-    
+    jest.spyOn(console, "error").mockImplementation(() => {});
+    (auth.currentUser?.getIdToken as jest.Mock).mockResolvedValue("mock-token");
+
     // Default fetch mock to prevent undefined errors
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: true,
       status: 200,
       body: {
         getReader: () => ({
-          read: jest.fn()
-            .mockResolvedValueOnce({ done: false, value: new Uint8Array([79, 75]) }) // "OK"
+          read: jest
+            .fn()
+            .mockResolvedValueOnce({
+              done: false,
+              value: new Uint8Array([79, 75]),
+            }) // "OK"
             .mockResolvedValueOnce({ done: true, value: undefined }),
         }),
       },
@@ -60,32 +64,38 @@ describe('ChatPage', () => {
     (console.error as jest.Mock).mockRestore();
   });
 
-  it('renders input and empty state', () => {
+  it("renders input and empty state", () => {
     render(<ChatPage />);
-    expect(screen.getByPlaceholderText(/Query the internal knowledge base/i)).toBeInTheDocument();
-    expect(screen.getByText(/Welcome to the Secure Knowledge Base/i)).toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText(/Query the internal knowledge base/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Welcome to the Secure Knowledge Base/i),
+    ).toBeInTheDocument();
   });
 
-  it('sends a message and displays user input', async () => {
+  it("sends a message and displays user input", async () => {
     render(<ChatPage />);
-    const input = screen.getByPlaceholderText(/Query the internal knowledge base/i);
-    const button = screen.getByRole('button');
+    const input = screen.getByPlaceholderText(
+      /Query the internal knowledge base/i,
+    );
+    const button = screen.getByRole("button");
 
-    fireEvent.change(input, { target: { value: 'Hello AI' } });
+    fireEvent.change(input, { target: { value: "Hello AI" } });
     fireEvent.click(button);
 
     // Should show user message
-    expect(screen.getByText('Hello AI')).toBeInTheDocument();
+    expect(screen.getByText("Hello AI")).toBeInTheDocument();
     // Input should be cleared
-    expect(input).toHaveValue('');
+    expect(input).toHaveValue("");
 
     // Wait for the async operation to complete to avoid act warnings
     await waitFor(() => {
-      expect(screen.getByText('OK')).toBeInTheDocument();
+      expect(screen.getByText("OK")).toBeInTheDocument();
     });
   });
 
-  it('displays streaming response', async () => {
+  it("displays streaming response", async () => {
     // Mock streaming response
     const mockStream = new ReadableStream({
       start(controller) {
@@ -103,10 +113,12 @@ describe('ChatPage', () => {
     });
 
     render(<ChatPage />);
-    const input = screen.getByPlaceholderText(/Query the internal knowledge base/i);
-    const button = screen.getByRole('button');
+    const input = screen.getByPlaceholderText(
+      /Query the internal knowledge base/i,
+    );
+    const button = screen.getByRole("button");
 
-    fireEvent.change(input, { target: { value: 'Hi' } });
+    fireEvent.change(input, { target: { value: "Hi" } });
     fireEvent.click(button);
 
     await waitFor(() => {
@@ -114,14 +126,16 @@ describe('ChatPage', () => {
     });
   });
 
-  it('handles errors gracefully', async () => {
-    (global.fetch as jest.Mock).mockRejectedValue(new Error('Network error'));
+  it("handles errors gracefully", async () => {
+    (global.fetch as jest.Mock).mockRejectedValue(new Error("Network error"));
 
     render(<ChatPage />);
-    const input = screen.getByPlaceholderText(/Query the internal knowledge base/i);
-    const button = screen.getByRole('button');
+    const input = screen.getByPlaceholderText(
+      /Query the internal knowledge base/i,
+    );
+    const button = screen.getByRole("button");
 
-    fireEvent.change(input, { target: { value: 'Hi' } });
+    fireEvent.change(input, { target: { value: "Hi" } });
     fireEvent.click(button);
 
     await waitFor(() => {

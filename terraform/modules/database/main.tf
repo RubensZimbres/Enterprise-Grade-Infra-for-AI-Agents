@@ -61,6 +61,11 @@ resource "google_sql_database_instance" "postgres" {
         retention_unit   = "COUNT"
       }
     }
+
+    database_flags {
+      name  = "cloudsql.iam_authentication"
+      value = "on"
+    }
   }
 
   deletion_protection = true # Enabled for DR safety
