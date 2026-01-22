@@ -21,7 +21,7 @@ resource "google_storage_bucket" "data_bucket" {
       storage_class = "NEARLINE"
     }
     condition {
-      num_newer_versions = 1  # Only move if it's not the latest version
+      num_newer_versions         = 1 # Only move if it's not the latest version
       days_since_noncurrent_time = 7
     }
   }
@@ -32,7 +32,7 @@ resource "google_storage_bucket" "data_bucket" {
       storage_class = "ARCHIVE"
     }
     condition {
-      num_newer_versions = 1
+      num_newer_versions         = 1
       days_since_noncurrent_time = 30
     }
   }
@@ -43,7 +43,7 @@ resource "google_storage_bucket" "data_bucket" {
       type = "Delete"
     }
     condition {
-      num_newer_versions = 1
+      num_newer_versions         = 1
       days_since_noncurrent_time = 90
     }
   }
@@ -51,11 +51,11 @@ resource "google_storage_bucket" "data_bucket" {
 
 # Bucket for Cloud Function Source Code
 resource "google_storage_bucket" "source_bucket" {
-  name          = "${var.project_id}-gcf-source-${random_id.bucket_suffix.hex}"
-  location      = var.region
-  force_destroy = true
+  name                        = "${var.project_id}-gcf-source-${random_id.bucket_suffix.hex}"
+  location                    = var.region
+  force_destroy               = true
   uniform_bucket_level_access = true
-  # Source code buckets generally don't need complex versioning rules 
+  # Source code buckets generally don't need complex versioning rules
   # as they are re-built from Git, but keeping recent versions is safe.
   versioning {
     enabled = true

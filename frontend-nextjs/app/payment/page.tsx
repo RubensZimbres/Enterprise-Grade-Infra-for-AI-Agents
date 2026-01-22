@@ -1,10 +1,10 @@
-import React from 'react';
-import { getSecret } from '@/lib/secrets';
-import PaymentClient from './PaymentClient';
-import { ShieldCheck } from 'lucide-react';
+import React from "react";
+import { getSecret } from "@/lib/secrets";
+import PaymentClient from "./PaymentClient";
+import { ShieldCheck } from "lucide-react";
 
 export default async function PaymentPage() {
-  const publishableKey = await getSecret('STRIPE_PUBLISHABLE_KEY');
+  const publishableKey = await getSecret("STRIPE_PUBLISHABLE_KEY");
 
   if (!publishableKey) {
     return (
@@ -12,9 +12,12 @@ export default async function PaymentPage() {
         <div className="p-4 bg-red-500/10 rounded-full mb-4">
           <ShieldCheck className="w-12 h-12 text-red-500" />
         </div>
-        <h1 className="text-2xl font-bold text-white mb-2">Configuration Error</h1>
+        <h1 className="text-2xl font-bold text-white mb-2">
+          Configuration Error
+        </h1>
         <p className="text-slate-400">
-          Payment system is currently unavailable. Please check system configuration.
+          Payment system is currently unavailable. Please check system
+          configuration.
         </p>
       </main>
     );
@@ -28,10 +31,12 @@ export default async function PaymentPage() {
             <ShieldCheck className="w-8 h-8 text-white" />
           </div>
         </div>
-        <h1 className="text-3xl font-bold text-white tracking-tight">Secure Checkout</h1>
+        <h1 className="text-3xl font-bold text-white tracking-tight">
+          Secure Checkout
+        </h1>
         <p className="mt-2 text-slate-400">Initialize your secure session</p>
       </div>
-      
+
       <PaymentClient publishableKey={publishableKey} />
     </main>
   );

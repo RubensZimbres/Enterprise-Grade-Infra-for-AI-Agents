@@ -74,7 +74,7 @@ resource "google_cloud_run_v2_service" "backend" {
       max_instance_count = 20
     }
 
-    vpc_access{
+    vpc_access {
       network_interfaces {
         network    = var.vpc_name
         subnetwork = var.subnet_name
@@ -124,9 +124,9 @@ resource "google_cloud_run_v2_service" "backend" {
         value = var.region
       }
       env {
-          name  = "DB_USER"
-          value = "postgres"
-        }
+        name  = "DB_USER"
+        value = "postgres"
+      }
       env {
         name  = "DB_NAME"
         value = "postgres"
@@ -201,7 +201,7 @@ resource "google_cloud_run_v2_service" "frontend" {
       max_instance_count = 20
     }
 
-    vpc_access{
+    vpc_access {
       network_interfaces {
         network    = var.vpc_name
         subnetwork = var.subnet_name
@@ -273,9 +273,9 @@ resource "google_cloud_run_v2_job" "ingest_job" {
   template {
     template {
       service_account = google_service_account.backend_sa.email
-      timeout = "600s"
+      timeout         = "600s"
 
-      vpc_access{
+      vpc_access {
         network_interfaces {
           network    = var.vpc_name
           subnetwork = var.subnet_name
@@ -304,9 +304,9 @@ resource "google_cloud_run_v2_job" "ingest_job" {
           value = var.region
         }
         env {
-            name  = "DB_USER"
-            value = "postgres"
-          }
+          name  = "DB_USER"
+          value = "postgres"
+        }
         env {
           name  = "DB_NAME"
           value = "postgres"

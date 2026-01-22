@@ -17,7 +17,7 @@ steps:
 
   # 1. Build the Container Image using the Dockerfile in backend-agent/
   - name: 'gcr.io/cloud-builders/docker'
-    args: 
+    args:
       - 'build'
       - '-t'
       - '$_AR_HOSTNAME/$PROJECT_ID/cloud-run-source-deploy/backend:$COMMIT_SHA'
@@ -26,7 +26,7 @@ steps:
 
   # 2. Push the Image to Artifact Registry
   - name: 'gcr.io/cloud-builders/docker'
-    args: 
+    args:
       - 'push'
       - '$_AR_HOSTNAME/$PROJECT_ID/cloud-run-source-deploy/backend:$COMMIT_SHA'
     id: 'Push Backend'

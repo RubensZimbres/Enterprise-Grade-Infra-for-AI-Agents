@@ -1,5 +1,4 @@
 import logging
-import datetime
 from google import genai
 from google.genai.types import CreateCachedContentConfig
 from config import settings
@@ -34,15 +33,14 @@ SECURITY GUARDRAILS:
 We are caching it to save on input token costs and latency for every single request.)
 """
 
+
 class CacheManager:
     def __init__(self):
         self.client = genai.Client(
-            vertexai=True,
-            project=settings.PROJECT_ID,
-            location=settings.REGION
+            vertexai=True, project=settings.PROJECT_ID, location=settings.REGION
         )
         self.cache_name = None
-        self.ttl = "3600s" # 1 Hour
+        self.ttl = "3600s"  # 1 Hour
 
     def get_or_create_cache(self) -> str:
         """
@@ -56,7 +54,7 @@ class CacheManager:
             logger.info("Initializing Gemini Context Cache...")
 
             cached_content = self.client.caches.create(
-                model="gemini-2.5-flash", # Ensure version match with main.py
+                model="gemini-2.5-flash",  # Ensure version match with main.py
                 config=CreateCachedContentConfig(
                     display_name="enterprise_system_prompt",
                     system_instruction=SYSTEM_INSTRUCTION_TEXT,
@@ -74,6 +72,7 @@ class CacheManager:
             logger.error(f"Failed to create cache: {e}")
             # Fallback: Return None, logic should handle uncached path or fail
             return None
+
 
 # Singleton instance
 cache_manager = CacheManager()

@@ -5,8 +5,8 @@
 module "network" {
   source = "./modules/network"
 
-  project_id  = var.project_id  # CHANGED from local.project_id
-  region      = var.region      # CHANGED from local.region
+  project_id  = var.project_id # CHANGED from local.project_id
+  region      = var.region     # CHANGED from local.region
   subnet_cidr = "10.0.0.0/24"
 }
 
@@ -160,4 +160,3 @@ module "cicd" {
   github_owner     = var.github_owner
   github_repo_name = var.github_repo_name
 }
-

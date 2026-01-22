@@ -46,7 +46,7 @@ export default function ChatPage() {
     try {
       // Get fresh token
       const token = await auth.currentUser?.getIdToken();
-      
+
       if (!token) {
         throw new Error("Authentication failed. Please login.");
       }
@@ -56,7 +56,7 @@ export default function ChatPage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`, // Send real token
+          Authorization: `Bearer ${token}`, // Send real token
         },
         body: JSON.stringify({
           message: userMessage,
@@ -84,15 +84,15 @@ export default function ChatPage() {
         if (done) break;
 
         const chunk = decoder.decode(value, { stream: true });
-        
+
         setMessages((prev) => {
           const newMessages = [...prev];
           const lastIdx = newMessages.length - 1;
-          
+
           if (lastIdx >= 0 && newMessages[lastIdx].role === "assistant") {
             newMessages[lastIdx] = {
               ...newMessages[lastIdx],
-              content: newMessages[lastIdx].content + chunk
+              content: newMessages[lastIdx].content + chunk,
             };
           }
           return newMessages;
@@ -102,7 +102,12 @@ export default function ChatPage() {
       console.error("Streaming error:", error);
       setMessages((prev) => [
         ...prev.slice(0, -1),
-        { role: "assistant", content: `⚠️ Error: ${error.message || "Connection to neural core lost."}` },
+        {
+          role: "assistant",
+          content: `⚠️ Error: ${
+            error.message || "Connection to neural core lost."
+          }`,
+        },
       ]);
     } finally {
       setIsLoading(false);
@@ -118,7 +123,9 @@ export default function ChatPage() {
             <ShieldCheck className="w-6 h-6 text-white" />
           </div>
           <div>
-            <h1 className="text-xl font-bold tracking-tight">Enterprise AI Agent</h1>
+            <h1 className="text-xl font-bold tracking-tight">
+              Enterprise AI Agent
+            </h1>
             <p className="text-sm text-slate-400">Secure RAG Pipeline v2.0</p>
           </div>
         </div>
@@ -130,7 +137,7 @@ export default function ChatPage() {
       </header>
 
       {/* Chat Container */}
-      <div 
+      <div
         ref={scrollRef}
         className="flex-1 overflow-y-auto space-y-6 mb-8 pr-4 scrollbar-hide"
       >
@@ -139,7 +146,8 @@ export default function ChatPage() {
             <Bot className="w-12 h-12 text-slate-700" />
             <div className="max-w-xs">
               <p className="text-slate-400">
-                Welcome to the Secure Knowledge Base. Ask me anything about our internal documentation.
+                Welcome to the Secure Knowledge Base. Ask me anything about our
+                internal documentation.
               </p>
             </div>
           </div>
@@ -150,21 +158,30 @@ export default function ChatPage() {
             key={i}
             className={cn(
               "flex gap-4 p-4 rounded-2xl transition-all",
-              m.role === "user" ? "bg-slate-900/50" : "bg-blue-600/5"
+              m.role === "user" ? "bg-slate-900/50" : "bg-blue-600/5",
             )}
           >
-            <div className={cn(
-              "w-8 h-8 rounded-full flex items-center justify-center shrink-0",
-              m.role === "user" ? "bg-slate-800" : "bg-blue-600"
-            )}>
-              {m.role === "user" ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4 text-white" />}
+            <div
+              className={cn(
+                "w-8 h-8 rounded-full flex items-center justify-center shrink-0",
+                m.role === "user" ? "bg-slate-800" : "bg-blue-600",
+              )}
+            >
+              {m.role === "user" ? (
+                <User className="w-4 h-4" />
+              ) : (
+                <Bot className="w-4 h-4 text-white" />
+              )}
             </div>
             <div className="flex-1 space-y-2">
               <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">
                 {m.role === "user" ? "Human" : "Neural Core"}
               </p>
               <div className="text-slate-200 leading-relaxed whitespace-pre-wrap">
-                {m.content || (isLoading && i === messages.length - 1 && <Loader2 className="w-4 h-4 animate-spin text-blue-500" />)}
+                {m.content ||
+                  (isLoading && i === messages.length - 1 && (
+                    <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+                  ))}
               </div>
             </div>
           </div>
@@ -184,10 +201,14 @@ export default function ChatPage() {
           disabled={isLoading || !input.trim()}
           className="absolute right-3 top-1/2 -translate-y-1/2 p-2 bg-blue-600 text-white rounded-xl hover:bg-blue-500 disabled:opacity-50 disabled:hover:bg-blue-600 transition-colors"
         >
-          {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+          {isLoading ? (
+            <Loader2 className="w-5 h-5 animate-spin" />
+          ) : (
+            <Send className="w-5 h-5" />
+          )}
         </button>
       </form>
-      
+
       <footer className="mt-4 text-center">
         <p className="text-[10px] text-slate-600 uppercase tracking-[0.2em]">
           End-to-End Encrypted • DLP Guardrails Active

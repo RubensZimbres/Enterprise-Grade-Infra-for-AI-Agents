@@ -24,7 +24,7 @@ steps:
 
   # 1. Build the Container Image using the Dockerfile in frontend-nextjs/
   - name: 'gcr.io/cloud-builders/docker'
-    args: 
+    args:
       - 'build'
       - '--build-arg'
       - 'NEXT_PUBLIC_FIREBASE_API_KEY=$_NEXT_PUBLIC_FIREBASE_API_KEY'
@@ -45,7 +45,7 @@ steps:
 
   # 2. Push the Image to Artifact Registry
   - name: 'gcr.io/cloud-builders/docker'
-    args: 
+    args:
       - 'push'
       - '$_AR_HOSTNAME/$PROJECT_ID/cloud-run-source-deploy/frontend:$COMMIT_SHA'
     id: 'Push Frontend'
