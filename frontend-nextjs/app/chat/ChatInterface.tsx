@@ -16,11 +16,20 @@ interface Message {
   content: string;
 }
 
+// Generate cryptographically secure session ID
+function generateSecureSessionId(): string {
+  const array = new Uint8Array(16);
+  crypto.getRandomValues(array);
+  return Array.from(array, (byte) => byte.toString(16).padStart(2, "0")).join(
+    "",
+  );
+}
+
 export default function ChatPage() {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [sessionId] = useState(() => Math.random().toString(36).substring(7));
+  const [sessionId] = useState(() => generateSecureSessionId());
   const scrollRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 

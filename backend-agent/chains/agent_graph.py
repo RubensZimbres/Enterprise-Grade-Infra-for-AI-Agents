@@ -2,7 +2,7 @@ from typing import TypedDict
 from langgraph.graph import StateGraph, END
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from chains.rag_chain import rag_chain, llm, settings
+from chains.rag_chain import conversational_rag_chain, llm, settings
 from .guardrails import check_security, deidentify_content
 import logging
 import httpx
@@ -25,6 +25,7 @@ class AgentState(TypedDict):
     history: list
     answer: str
     intent: str
+    session_id: str  # Added for Firestore history management
 
 
 # 2. Define Nodes
@@ -85,13 +86,16 @@ def general_node(state: AgentState):
 def rag_node(state: AgentState):
     """
     Invokes the existing RAG chain for technical queries.
+    Uses conversational_rag_chain which handles history via Firestore automatically.
     """
     logger.info("--- RAG NODE ---")
-    response = rag_chain.invoke(
-        {"question": state["question"], "history": state["history"]}
+    # Get session_id from state (passed through from protected_graph_invoke)
+    session_id = state.get("session_id", "default_session")
+    response = conversational_rag_chain.invoke(
+        {"question": state["question"]},
+        config={"configurable": {"session_id": session_id}},
     )
-    # rag_chain returns an AIMessage or string depending on the last step.
-    # In rag_chain.py it ends with `| llm`, so it returns an AIMessage.
+    # conversational_rag_chain returns an AIMessage
     return {"answer": response.content}
 
 
@@ -151,31 +155,13 @@ async def protected_graph_invoke(input_text: str, session_id: str):
     safe_input = await deidentify_content(input_text, settings.PROJECT_ID)
 
     # Step C: Run Graph
-    # Note: We need to manage history. For now, we'll pass an empty list or fetch it if possible.
-    # To keep it simple for this migration, we'll rely on the client or session management.
-    # Ideally, we should fetch history here using Firestore.
-    # For now, let's assume stateless for the graph logic or pass empty history
-    # since `rag_chain` might handle its own history if wrapped,
-    # BUT `rag_chain` in `rag_chain.py` is a raw chain, not the `RunnableWithMessageHistory`.
-    # To fix this properly, we should load history here.
-
-    # Fetching history (Simplified for this file to avoid circular imports or complexity):
-    # In a real app, use the Firestore history loader here.
-    # For this implementation, we will pass an empty list as placeholder,
-    # or rely on `conversational_rag_chain` concepts if we were wrapping that.
-    # However, we are unwrapping it to `rag_chain`.
-
-    # IMPORTANT: The previous `conversational_rag_chain` handled history automatically.
-    # By switching to `rag_chain` inside the graph, we lose that automatic history injection.
-    # To maintain feature parity, we should probably fetch history.
-    # But to keep this step "Low Complexity", I will proceed with empty history for now
-    # and note that history management needs to be added to the graph state or `rag_node`.
-
+    # History is managed by conversational_rag_chain via Firestore in the rag_node
     inputs = {
         "question": safe_input,
-        "history": [],  # Placeholder.
+        "history": [],  # Placeholder - actual history managed by conversational_rag_chain
         "intent": "",
         "answer": "",
+        "session_id": session_id,  # Passed to rag_node for Firestore history
     }
 
     result = await graph_app.ainvoke(inputs)
@@ -197,7 +183,13 @@ async def protected_graph_stream(input_text: str, session_id: str):
 
     safe_input = await deidentify_content(input_text, settings.PROJECT_ID)
 
-    inputs = {"question": safe_input, "history": [], "intent": "", "answer": ""}
+    inputs = {
+        "question": safe_input,
+        "history": [],
+        "intent": "",
+        "answer": "",
+        "session_id": session_id,  # Pass session_id for Firestore history
+    }
 
     # Stream the OUTPUT of the final node
     async for event in graph_app.astream(inputs):

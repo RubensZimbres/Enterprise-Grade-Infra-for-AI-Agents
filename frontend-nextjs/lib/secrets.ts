@@ -13,7 +13,11 @@ export async function getSecret(
 
   // If not in env, try Secret Manager
   try {
-    const projectId = process.env.GOOGLE_CLOUD_PROJECT || "505484012957"; // Fallback to ID from python code if env not set
+    const projectId = process.env.GOOGLE_CLOUD_PROJECT;
+    if (!projectId) {
+      console.error("GOOGLE_CLOUD_PROJECT environment variable is not set");
+      return undefined;
+    }
     const name = `projects/${projectId}/secrets/${secretId}/versions/${versionId}`;
     const [version] = await client.accessSecretVersion({ name });
     const payload = version.payload?.data?.toString();

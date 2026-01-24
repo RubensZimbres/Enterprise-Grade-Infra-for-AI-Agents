@@ -167,7 +167,15 @@ async def stripe_webhook(
     """
     Handle Stripe Webhooks to update user subscription status.
     """
+    # Validate stripe_signature is present
+    if not stripe_signature:
+        logger.error("Missing Stripe signature header")
+        raise HTTPException(status_code=400, detail="Missing Stripe signature")
+
     payload = await request.body()
+    if not payload:
+        logger.error("Empty request payload")
+        raise HTTPException(status_code=400, detail="Empty payload")
 
     try:
         event = stripe.Webhook.construct_event(
