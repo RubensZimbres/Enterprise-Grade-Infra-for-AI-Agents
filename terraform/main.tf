@@ -82,7 +82,8 @@ module "function" {
   db_name               = "postgres" # Default
   db_user               = "postgres" # Default
   db_password_secret_id = module.database.secret_id
-  depends_on            = [module.database, module.storage]
+  vpc_name              = module.network.vpc_name
+  depends_on            = [module.database, module.storage, module.network]
 }
 
 # Secrets for Stripe

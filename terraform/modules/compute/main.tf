@@ -232,15 +232,6 @@ resource "google_cloud_run_v2_service" "frontend" {
           }
         }
       }
-      env {
-        name = "STRIPE_SECRET_KEY"
-        value_source {
-          secret_key_ref {
-            secret  = "STRIPE_SECRET_KEY"
-            version = "latest"
-          }
-        }
-      }
     }
   }
 }
@@ -327,6 +318,15 @@ resource "google_cloud_run_v2_job" "ingest_job" {
         env {
           name  = "REDIS_HOST"
           value = var.redis_host
+        }
+        env {
+          name = "REDIS_PASSWORD"
+          value_source {
+            secret_key_ref {
+              secret  = "REDIS_PASSWORD"
+              version = "latest"
+            }
+          }
         }
       }
     }
