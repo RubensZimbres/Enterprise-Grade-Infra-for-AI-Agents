@@ -206,7 +206,7 @@ resource "google_cloud_run_v2_service" "frontend" {
         network    = var.vpc_name
         subnetwork = var.subnet_name
       }
-      egress = "PRIVATE_RANGES_ONLY"
+      egress = "PRIVATE_RANGES_ONLY" ### If connectivity fails, switch egress to ALL_TRAFFIC
     }
 
     containers {
