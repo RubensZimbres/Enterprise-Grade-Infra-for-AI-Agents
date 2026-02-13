@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from chains.rag_chain import protected_chain_invoke, protected_chain_stream
+from chains.agent_graph import protected_graph_invoke, protected_graph_stream
 from dependencies import get_current_user
 from database import engine, get_db
 from config import settings
@@ -35,6 +35,7 @@ from slowapi.errors import RateLimitExceeded
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
 # Initialize Limiter
 def get_real_ip(request: Request):
     """
@@ -46,35 +47,62 @@ def get_real_ip(request: Request):
         return forwarded.split(",")[0].strip()
     return get_remote_address(request)
 
+
 limiter = Limiter(key_func=get_real_ip)
 app = FastAPI(title="Enterprise AI Agent", version="1.0.0")
+
 
 # Request Logging Middleware
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     import time
+
     start_time = time.time()
     response = await call_next(request)
     process_time = (time.time() - start_time) * 1000
     formatted_process_time = "{0:.2f}".format(process_time)
-    logger.info(f"path={request.url.path} method={request.method} status={response.status_code} duration={formatted_process_time}ms")
+    logger.info(
+        f"path={request.url.path} method={request.method} status={response.status_code} duration={formatted_process_time}ms"
+    )
     return response
+
 
 # Startup Event: Connectivity Check
 @app.on_event("startup")
 async def startup_event():
     logger.info("Starting up Backend Agent...")
+
+    # 1. Check Database Connectivity
     try:
-        # Check Database Connectivity
         with engine.connect() as connection:
             from sqlalchemy import text
+
             connection.execute(text("SELECT 1"))
         logger.info("✅ Database connection successful.")
     except Exception as e:
         logger.error(f"❌ Database connection failed: {e}")
+        raise RuntimeError(f"Database connection failed: {e}")  # Fail Fast
+
+    # 2. Check Redis Connectivity
+    try:
+        import redis
+
+        logger.info(f"Connecting to Redis at {settings.REDIS_HOST}...")
+        r = redis.Redis(
+            host=settings.REDIS_HOST,
+            port=6379,
+            password=settings.REDIS_PASSWORD,
+            socket_connect_timeout=3,
+        )
+        r.ping()
+        logger.info("✅ Redis connection successful.")
+    except Exception as e:
+        logger.error(f"❌ Redis connection failed: {e}")
+        raise RuntimeError(f"Redis connection failed: {e}")  # Fail Fast
 
     # Check Settings (Redacted)
     logger.info(f"Config: DB_HOST={settings.DB_HOST}, REDIS_HOST={settings.REDIS_HOST}")
+
 
 # Initialize DB
 models.Base.metadata.create_all(bind=engine)
@@ -110,90 +138,123 @@ app.add_middleware(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+
 class ChatRequest(BaseModel):
     session_id: str
-    message: str = Field(..., max_length=10000) # Limit to 10k chars (DoS Protection)
+    message: str = Field(..., max_length=10000)  # Limit to 10k chars (DoS Protection)
+
 
 class ChatResponse(BaseModel):
     response: str
+
 
 def validate_token_count(text: str, limit: int = 2000):
     """
     Validates that the message token count is within limits using tiktoken.
     """
     try:
-        encoding = tiktoken.get_encoding("cl100k_base") # Standard encoding for GPT-4/3.5
+        encoding = tiktoken.get_encoding(
+            "cl100k_base"
+        )  # Standard encoding for GPT-4/3.5
         num_tokens = len(encoding.encode(text))
         if num_tokens > limit:
-            raise HTTPException(status_code=400, detail=f"Message too long. Tokens: {num_tokens}, Limit: {limit}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Message too long. Tokens: {num_tokens}, Limit: {limit}",
+            )
     except Exception as e:
         # Fallback if tiktoken fails
         logger.warning(f"Tiktoken failed: {e}. using character approximation.")
         estimated_tokens = len(text) / 4
         if estimated_tokens > limit:
-            raise HTTPException(status_code=400, detail=f"Message too long (est). Limit: {limit}")
+            raise HTTPException(
+                status_code=400, detail=f"Message too long (est). Limit: {limit}"
+            )
+
 
 @app.get("/health")
 def health_check():
     return {"status": "healthy"}
 
+
 @app.post("/webhook")
-async def stripe_webhook(request: Request, stripe_signature: str = Header(None), db: Session = Depends(get_db)):
+async def stripe_webhook(
+    request: Request,
+    stripe_signature: str = Header(None),
+    db: Session = Depends(get_db),
+):
     """
     Handle Stripe Webhooks to update user subscription status.
     """
+    # Validate stripe_signature is present
+    if not stripe_signature:
+        logger.error("Missing Stripe signature header")
+        raise HTTPException(status_code=400, detail="Missing Stripe signature")
+
     payload = await request.body()
+    if not payload:
+        logger.error("Empty request payload")
+        raise HTTPException(status_code=400, detail="Empty payload")
 
     try:
         event = stripe.Webhook.construct_event(
             payload, stripe_signature, STRIPE_WEBHOOK_SECRET
         )
-    except ValueError as e:
+    except ValueError:
         logger.error("Invalid payload")
         raise HTTPException(status_code=400, detail="Invalid payload")
-    except stripe.error.SignatureVerificationError as e:
+    except stripe.error.SignatureVerificationError:
         logger.error("Invalid signature")
         raise HTTPException(status_code=400, detail="Invalid signature")
 
     logger.info(f"Received Stripe event: {event['type']}")
 
-    if event['type'] == 'checkout.session.completed':
-        session = event['data']['object']
-        customer_email = session.get('customer_email')
-        customer_id = session.get('customer')
+    if event["type"] == "checkout.session.completed":
+        session = event["data"]["object"]
+        customer_email = session.get("customer_email")
+        customer_id = session.get("customer")
 
         if customer_email:
-            crud.update_user_subscription(db, customer_email, 'active', customer_id)
+            crud.update_user_subscription(db, customer_email, "active", customer_id)
             # Log customer_id instead of email for privacy
             logger.info(f"Activated subscription for customer_id: {customer_id}")
 
-    elif event['type'] == 'invoice.payment_succeeded':
-        invoice = event['data']['object']
-        customer_email = invoice.get('customer_email')
-        customer_id = invoice.get('customer')
+    elif event["type"] == "invoice.payment_succeeded":
+        invoice = event["data"]["object"]
+        customer_email = invoice.get("customer_email")
+        customer_id = invoice.get("customer")
 
         if customer_email:
-            crud.update_user_subscription(db, customer_email, 'active', customer_id)
+            crud.update_user_subscription(db, customer_email, "active", customer_id)
             logger.info(f"Renewed subscription for customer_id: {customer_id}")
 
-    elif event['type'] == 'customer.subscription.deleted':
-        subscription = event['data']['object']
-        customer_id = subscription.get('customer')
-        
+    elif event["type"] == "customer.subscription.deleted":
+        subscription = event["data"]["object"]
+        customer_id = subscription.get("customer")
+
         if customer_id:
-            updated_user = crud.update_subscription_by_stripe_id(db, customer_id, 'canceled')
+            updated_user = crud.update_subscription_by_stripe_id(
+                db, customer_id, "canceled"
+            )
             if updated_user:
                 logger.info(f"Canceled subscription for customer_id: {customer_id}")
             else:
-                logger.warning(f"Received cancellation for unknown customer_id: {customer_id}")
+                logger.warning(
+                    f"Received cancellation for unknown customer_id: {customer_id}"
+                )
         else:
-             logger.warning("Received cancellation event without customer_id")
+            logger.warning("Received cancellation event without customer_id")
 
     return {"status": "success"}
 
+
 @app.post("/chat", response_model=ChatResponse)
 @limiter.limit("10/minute")
-async def chat_endpoint(chat_request: ChatRequest, request: Request, user_email: str = Depends(get_current_user)):
+async def chat_endpoint(
+    chat_request: ChatRequest,
+    request: Request,
+    user_email: str = Depends(get_current_user),
+):
     """
     Main entry point for the Frontend Agent.
     Handles RAG, Memory, and DLP.
@@ -206,20 +267,27 @@ async def chat_endpoint(chat_request: ChatRequest, request: Request, user_email:
         secure_session_id = f"{user_email}:{chat_request.session_id}"
 
         # Invoke the chain with guardrails asynchronously
-        response_text = await protected_chain_invoke(chat_request.message, secure_session_id)
+        response_text = await protected_graph_invoke(
+            chat_request.message, secure_session_id
+        )
 
         return ChatResponse(response=response_text)
 
     except HTTPException as e:
         raise e
-    except Exception as e:
+    except Exception:
         # Log the stack trace securely (Hidden from user)
         logger.error("Error processing request", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal Processing Error")
 
+
 @app.post("/stream")
 @limiter.limit("10/minute")
-async def stream_endpoint(chat_request: ChatRequest, request: Request, user_email: str = Depends(get_current_user)):
+async def stream_endpoint(
+    chat_request: ChatRequest,
+    request: Request,
+    user_email: str = Depends(get_current_user),
+):
     """
     Streaming version of the chat endpoint.
     """
@@ -230,16 +298,18 @@ async def stream_endpoint(chat_request: ChatRequest, request: Request, user_emai
         secure_session_id = f"{user_email}:{chat_request.session_id}"
 
         return StreamingResponse(
-            protected_chain_stream(chat_request.message, secure_session_id),
-            media_type="text/event-stream"
+            protected_graph_stream(chat_request.message, secure_session_id),
+            media_type="text/event-stream",
         )
     except HTTPException as e:
         raise e
-    except Exception as e:
+    except Exception:
         logger.error("Error in streaming response", exc_info=True)
         raise HTTPException(status_code=500, detail="Streaming Error")
 
+
 if __name__ == "__main__":
     import uvicorn
+
     # Listen on 0.0.0.0 because we are inside a container
     uvicorn.run(app, host="0.0.0.0", port=8080)

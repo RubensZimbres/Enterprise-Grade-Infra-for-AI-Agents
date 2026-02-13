@@ -26,7 +26,7 @@ resource "google_billing_budget" "budget" {
   }
 }
 
-# --- 2. Cloud Trace is enabled by default for most projects, 
+# --- 2. Cloud Trace is enabled by default for most projects,
 # but we ensure the APIs are enabled in the root module.
 
 # --- 3. Monitoring: Anomaly Trigger (Logging based) ---
@@ -44,9 +44,9 @@ resource "google_monitoring_alert_policy" "anomaly_alert" {
   conditions {
     display_name = "High Error Rate"
     condition_threshold {
-      filter     = "resource.type=\"cloud_run_revision\" AND metric.type=\"logging.googleapis.com/user/error_count\""
-      duration   = "60s"
-      comparison = "COMPARISON_GT"
+      filter          = "resource.type=\"cloud_run_revision\" AND metric.type=\"logging.googleapis.com/user/error_count\""
+      duration        = "60s"
+      comparison      = "COMPARISON_GT"
       threshold_value = 10
       aggregations {
         alignment_period   = "60s"
@@ -55,7 +55,7 @@ resource "google_monitoring_alert_policy" "anomaly_alert" {
     }
   }
 
-  notification_channels = [google_monitoring_notification_channel.email.name]
+  notification_channels = [google_monitoring_notification_channel.email.id]
 }
 
 # Log Metric to count errors

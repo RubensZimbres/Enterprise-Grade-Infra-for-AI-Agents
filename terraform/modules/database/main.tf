@@ -40,7 +40,7 @@ resource "google_secret_manager_secret_version" "db_pass_version" {
 resource "google_sql_database_instance" "postgres" {
   name             = "${var.project_id}-db"
   region           = var.region
-  database_version = "POSTGRES_15"
+  database_version = "POSTGRES_16"
 
   settings {
     tier = "db-g1-small" # db-custom-2-7680 enterprise Cost-efficient tier. Adjust based on load.
@@ -60,6 +60,11 @@ resource "google_sql_database_instance" "postgres" {
         retained_backups = 7
         retention_unit   = "COUNT"
       }
+    }
+
+    database_flags {
+      name  = "cloudsql.iam_authentication"
+      value = "on"
     }
   }
 

@@ -11,8 +11,8 @@ resource "google_storage_bucket_object" "zip" {
   content_type = "application/zip"
 
   # Append MD5 to force update on change
-  name         = "src-${data.archive_file.source.output_md5}.zip"
-  bucket       = var.source_bucket_name
+  name   = "src-${data.archive_file.source.output_md5}.zip"
+  bucket = var.source_bucket_name
 }
 
 # Service Account for the Function
@@ -40,6 +40,14 @@ resource "google_secret_manager_secret_iam_member" "secret_access" {
   member    = "serviceAccount:${google_service_account.function_sa.email}"
 }
 
+# VPC Connector for Cloud Function to reach Private Cloud SQL
+resource "google_vpc_access_connector" "connector" {
+  name          = "pdf-ingest-conn"
+  region        = var.region
+  network       = var.vpc_name
+  ip_cidr_range = "10.8.0.0/28"
+}
+
 # Cloud Function (Gen 2)
 resource "google_cloudfunctions2_function" "function" {
   name        = "pdf-ingest-function"
@@ -48,7 +56,7 @@ resource "google_cloudfunctions2_function" "function" {
 
   build_config {
     runtime     = "python311"
-    entry_point = "ingest_pdf"  # Matches main.py
+    entry_point = "ingest_pdf" # Matches main.py
     source {
       storage_source {
         bucket = var.source_bucket_name
@@ -58,11 +66,15 @@ resource "google_cloudfunctions2_function" "function" {
   }
 
   service_config {
-    max_instance_count = 10
-    available_memory   = "512M"
-    timeout_seconds    = 300
+    max_instance_count    = 10
+    available_memory      = "512M"
+    timeout_seconds       = 300
     service_account_email = google_service_account.function_sa.email
-    
+
+    # VPC Access
+    vpc_connector                 = google_vpc_access_connector.connector.id
+    vpc_connector_egress_settings = "PRIVATE_RANGES_ONLY"
+
     environment_variables = {
       PROJECT_ID = var.project_id
       REGION     = var.region
@@ -80,9 +92,9 @@ resource "google_cloudfunctions2_function" "function" {
   }
 
   event_trigger {
-    trigger_region = var.region
-    event_type     = "google.cloud.storage.object.v1.finalized"
-    retry_policy   = "RETRY_POLICY_RETRY"
+    trigger_region        = var.region
+    event_type            = "google.cloud.storage.object.v1.finalized"
+    retry_policy          = "RETRY_POLICY_RETRY"
     service_account_email = google_service_account.function_sa.email
     event_filters {
       attribute = "bucket"

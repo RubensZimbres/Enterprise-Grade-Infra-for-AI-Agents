@@ -14,7 +14,7 @@ resource "google_compute_subnetwork" "private_subnet" {
 
   # Enable Google Private Access so VMs can reach Google APIs (Vertex, Storage)
   # without going over the public internet.
-  private_ip_google_access = true 
+  private_ip_google_access = true
 }
 
 # 3. Private Service Access (PSA) for AlloyDB & Vertex AI

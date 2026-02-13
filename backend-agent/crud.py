@@ -1,39 +1,70 @@
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import SQLAlchemyError
 from models import User
 import logging
 
 logger = logging.getLogger(__name__)
 
+
 def get_user(db: Session, email: str):
     return db.query(User).filter(User.email == email).first()
 
+
 def create_user(db: Session, email: str, stripe_customer_id: str = None):
-    db_user = User(email=email, stripe_customer_id=stripe_customer_id, is_active=False)
-    db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
-    return db_user
+    try:
+        db_user = User(
+            email=email, stripe_customer_id=stripe_customer_id, is_active=False
+        )
+        db.add(db_user)
+        db.commit()
+        db.refresh(db_user)
+        return db_user
+    except SQLAlchemyError as e:
+        db.rollback()
+        logger.error(f"Error creating user {email}: {e}")
+        raise
 
-def update_user_subscription(db: Session, email: str, status: str, stripe_customer_id: str = None):
-    user = get_user(db, email)
-    if not user:
-        user = create_user(db, email, stripe_customer_id)
-    
-    user.subscription_status = status
-    user.is_active = status == 'active'
-    if stripe_customer_id:
-        user.stripe_customer_id = stripe_customer_id
-        
-    db.commit()
-    db.refresh(user)
-    return user
 
-def update_subscription_by_stripe_id(db: Session, stripe_customer_id: str, status: str):
-    user = db.query(User).filter(User.stripe_customer_id == stripe_customer_id).first()
-    if user:
+def update_user_subscription(
+    db: Session, email: str, status: str, stripe_customer_id: str = None
+):
+    try:
+        user = get_user(db, email)
+        if not user:
+            user = User(
+                email=email, stripe_customer_id=stripe_customer_id, is_active=False
+            )
+            db.add(user)
+
         user.subscription_status = status
-        user.is_active = status == 'active'
+        user.is_active = status == "active"
+        if stripe_customer_id:
+            user.stripe_customer_id = stripe_customer_id
+
         db.commit()
         db.refresh(user)
         return user
-    return None
+    except SQLAlchemyError as e:
+        db.rollback()
+        logger.error(f"Error updating subscription for {email}: {e}")
+        raise
+
+
+def update_subscription_by_stripe_id(db: Session, stripe_customer_id: str, status: str):
+    try:
+        user = (
+            db.query(User).filter(User.stripe_customer_id == stripe_customer_id).first()
+        )
+        if user:
+            user.subscription_status = status
+            user.is_active = status == "active"
+            db.commit()
+            db.refresh(user)
+            return user
+        return None
+    except SQLAlchemyError as e:
+        db.rollback()
+        logger.error(
+            f"Error updating subscription for stripe_id {stripe_customer_id}: {e}"
+        )
+        raise

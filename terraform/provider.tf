@@ -22,12 +22,12 @@ terraform {
 
 provider "google" {
   project = var.project_id # CHANGE THIS
-  region  = var.region            # Using the variable
+  region  = var.region     # Using the variable
 }
 
 provider "google-beta" {
   project = var.project_id # CHANGE THIS
-  region  = var.region            # Using the variable
+  region  = var.region     # Using the variable
 }
 
 # --- APIs to Enable ---
